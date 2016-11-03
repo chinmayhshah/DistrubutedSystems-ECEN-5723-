@@ -490,6 +490,177 @@ int MD5Cal(char *filename, char *MD5_result)
 	return 0;
 }
 
+
+#define MAXFILESIZE 50000
+#define MAXFILESPLITSIZE MAXFILESIZE/4
+
+
+/*************************************************************************************
+Split Files into multiple files 
+i/p :sourcefilename -  Filename to be split 
+	:parts - No of equal size parts need to be split into 
+	   	
+Ref for understanding :http://www.programmingsimplified.com/c-program-merge-two-files
+***************************************************************************************/
+int splitFile(char *sourcefilename,int parts)
+{
+
+ 	//char sourceFileName[MAXPACKSIZE], ch, 
+ 	char destFileName[MAXPACKSIZE];
+ 	int ch=0;
+    long int size=0, k=0;
+    int i=0;
+    FILE *sourceFile,*splitFile; //file and temp file
+
+    //printf("enter the file you want to split with full path : ");
+    //scanf("%s", fn);
+    //printf("enter the number of parts you want to split the file : ");
+    //scanf("%ld", &n);
+    DEBUG_PRINT("Filename => %s",sourcefilename);
+    DEBUG_PRINT("NO of parts => %d",parts);
+
+    sourceFile=fopen(sourcefilename, "rb");//Open source file name 
+    if (sourceFile==NULL)// if file closed or not
+    {
+        printf("couldn't open file");
+        exit(-1);
+    }
+
+    // fseek(FILE *stream, long int offset, int whence)
+    fseek(sourceFile, 0, 2);//
+    size = ftell(sourceFile);// Calculate Size of Filename
+    DEBUG_PRINT("Size(File) => %ld\n", size);
+
+    i = 1;
+    k = (int)(size/parts);
+    DEBUG_PRINT("Split Size(File) => %ld\n", k);
+    
+    rewind(sourceFile);// Change the pointer back to original
+    sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+    DEBUG_PRINT("Split File name %s",destFileName);
+    splitFile = fopen(destFileName, "wb");//Open the destincation file
+    if (splitFile==NULL)// if file closed or not
+    {
+        printf("couldn't open file");
+        perror("Destination File Open");
+        exit(-1);
+    }
+    DEBUG_PRINT("Here ");
+    while(i<=(parts))
+    {
+        ch = fgetc(sourceFile);    
+        //if (ch==EOF)//check for end of file 
+        //    break;
+        //DEBUG_PRINT("Read Value => %s\n", ch);        
+        DEBUG_PRINT("Here 2");
+        fputc(ch, splitFile);
+        if(feof(splitFile) )
+	    {
+	    	DEBUG_PRINT("End of File=> File %d",i);
+	        break ;
+	    }
+        //To check for the size of file written 
+        if (ftell(sourceFile)==(i*k))//check the size of file reached 
+        {
+        	DEBUG_PRINT("Data of  file reached %d",(i*k));
+		    i = i+1;
+		    DEBUG_PRINT("Closing %s:%d",destFileName,splitFile);
+			fclose(splitFile);
+			if (i<=(parts)){
+	            sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+	            splitFile=fopen(destFileName, "wb");
+	        }
+        }
+    }
+    if(sourceFile){
+    	fclose(sourceFile);
+    }	
+   
+}
+
+/*************************************************************************************
+Split Files into multiple files 
+i/p - Filename i/p to 
+	-   	
+Ref for understanding :http://stackoverflow.com/questions/20759244/c-code-to-split-files
+***************************************************************************************/
+int mergeFile(char *sourcefilename,int parts)
+{
+
+ 	//char sourceFileName[MAXPACKSIZE], ch, 
+ 	char destFileName[MAXPACKSIZE];
+ 	int ch=0;
+    long int size=0, k=0;
+    int i=0;
+    FILE *sourceFile,*splitFile; //file and temp file
+
+    //printf("enter the file you want to split with full path : ");
+    //scanf("%s", fn);
+    //printf("enter the number of parts you want to split the file : ");
+    //scanf("%ld", &n);
+    DEBUG_PRINT("Filename => %s",sourcefilename);
+    DEBUG_PRINT("NO of parts => %d",parts);
+
+    sourceFile=fopen(sourcefilename, "rb");//Open source file name 
+    if (sourceFile==NULL)// if file closed or not
+    {
+        printf("couldn't open file");
+        exit(-1);
+    }
+
+    // fseek(FILE *stream, long int offset, int whence)
+    fseek(sourceFile, 0, 2);//
+    size = ftell(sourceFile);// Calculate Size of Filename
+    DEBUG_PRINT("Size(File) => %ld\n", size);
+
+    i = 1;
+    k = (int)(size/parts);
+    DEBUG_PRINT("Split Size(File) => %ld\n", k);
+    
+    rewind(sourceFile);// Change the pointer back to original
+    sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+    DEBUG_PRINT("Split File name %s",destFileName);
+    splitFile = fopen(destFileName, "wb");//Open the destincation file
+    if (splitFile==NULL)// if file closed or not
+    {
+        printf("couldn't open file");
+        perror("Destination File Open");
+        exit(-1);
+    }
+    DEBUG_PRINT("Here ");
+    while(i<=(parts))
+    {
+        ch = fgetc(sourceFile);    
+        //if (ch==EOF)//check for end of file 
+        //    break;
+        //DEBUG_PRINT("Read Value => %s\n", ch);        
+        DEBUG_PRINT("Here 2");
+        fputc(ch, splitFile);
+        if(feof(splitFile) )
+	    {
+	    	DEBUG_PRINT("End of File=> File %d",i);
+	        break ;
+	    }
+        //To check for the size of file written 
+        if (ftell(sourceFile)==(i*k))//check the size of file reached 
+        {
+        	DEBUG_PRINT("Data of  file reached %d",(i*k));
+		    i = i+1;
+		    DEBUG_PRINT("Closing %s:%d",destFileName,splitFile);
+			fclose(splitFile);
+			if (i<=(parts)){
+	            sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+	            splitFile=fopen(destFileName, "wb");
+	        }
+        }
+    }
+    if(sourceFile){
+    	fclose(sourceFile);
+    }	
+   
+}
+
+
 //For Socket
 int sock[MAXDFSCOUNT];//No(Sockets) =DFS Server availables
 struct sockaddr_in server[MAXDFSCOUNT];
@@ -553,8 +724,8 @@ int main (int argc, char * argv[] ){
 	        perror("Socket --> Exit ");
 	    	exit(-1);
 	    }
-
-		DEBUG_PRINT("All Sockets created");
+	    DEBUG_PRINT("counter %d created SOCKet %d ",i,sock[i]);
+		
 	    //Connect the multiple sockets 
 	    server[i].sin_addr.s_addr = inet_addr(config.DFSIP[i]);
 	    server[i].sin_family = AF_INET;
@@ -567,18 +738,27 @@ int main (int argc, char * argv[] ){
 	        perror("Connect failed. Error");
 	        exit(-1);
 	    }
- 		DEBUG_PRINT("All Sockets connected");
+ 		DEBUG_PRINT("connected SOCKet %d",sock[i]);
 	   
     }
-     
+    DEBUG_PRINT("All Sockets created");
+    DEBUG_PRINT("All Sockets connected");
+    i=0;
+
+    DEBUG_PRINT("Split File Name");
+
+    splitFile("test.txt",4);
+
+	DEBUG_PRINT("Completed splitting File name");     
     //keep communicating with server depending on command entered 
     while(1)
     {
-        DEBUG_PRINT("Enter message : ");
-        scanf("%s" , message);
-         
+    	        
+        bzero(message,sizeof(message));
+        sprintf(message,"Message to %s counter %d",config.DFSName[i],i); 
+        DEBUG_PRINT("message to send : %s",message);
         //Send some data
-        i=0;
+        
         if( send(sock[i] , message , strlen(message) , 0) < 0)
         {
             DEBUG_PRINT("Send failed");
@@ -586,8 +766,8 @@ int main (int argc, char * argv[] ){
         }
          
         //Receive a reply from the server
-        
-        if( recv(sock[i] , server_reply , 2000 , 0) < 0)
+		/*	        
+        if( recv(sock[i%MAXDFSCOUNT] , server_reply , strlen(server_reply), 0) < 0)
         {
             DEBUG_PRINT("recv failed");
             break;
@@ -595,6 +775,11 @@ int main (int argc, char * argv[] ){
          
         DEBUG_PRINT("Server reply :");
         DEBUG_PRINT("%s",server_reply);
+        */
+        if (i++ >= (MAXDFSCOUNT-1) ){
+        	i=0;
+        }
+        
         
     }
      

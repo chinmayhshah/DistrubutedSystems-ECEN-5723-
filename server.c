@@ -42,9 +42,7 @@ Last Edit : 9/25
 
 //Time set for Time out 
 struct timeval timeout={0,0};     
-/* You will have to modify the program below */
-#define LISTENQ 1000 
-#define SERV_PORT 3000
+
 
 #define MAXCOLSIZE 100
 #define HTTPREQ 	30
@@ -55,6 +53,9 @@ struct timeval timeout={0,0};
 #define ERRORMSGSIZE 1000
 #define MAXCOMMANDSIZE 100
 #define MAXCONTENTSUPPORT 15
+
+#define LISTENQ 1000 
+#define SERV_PORT 3000
 
 
 
@@ -814,11 +815,13 @@ int sendFile (char *filename){
 */
 
 //Client connection for each client 
+/*
 void *client_connections(void *client_sock_id){
 
 	DEBUG_PRINT("In %d",client_sock_id);
 }
-/*
+*/
+
 void *client_connections(void *client_sock_id)
 {
 	
@@ -840,8 +843,9 @@ void *client_connections(void *client_sock_id)
 
 			//printf("request from client %s\n",message_client );
 			strcpy(message_bkp,message_client);//backup of orginal message 
-			DEBUG_PRINT("Message length%d\n",(int)strlen(message_client) );
-			
+			DEBUG_PRINT("Message => %s \n",message_client );
+			DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
+			/*			
 			if ((split_attr=malloc(sizeof(split_attr)*MAXCOLSIZE))){	
 				strcpy(split_attr[HttpVersion],"HTTP/1.1");//Default
 				strcpy(split_attr[HttpMethod],"GET");//Default
@@ -894,8 +898,8 @@ void *client_connections(void *client_sock_id)
 			return NULL;
 
 		}
-
-
+	*/
+	}
 		
 	DEBUG_PRINT("Completed \n");
 	//Closing SOCKET
@@ -906,9 +910,10 @@ void *client_connections(void *client_sock_id)
 
 	//free(client_sock_id);//free the memory 
 	return 1 ;
+
 	
 }
-*/
+
 
 
 
@@ -1000,7 +1005,7 @@ int main (int argc, char * argv[] ){
 	}
 
 
-		
+
 	//Causes the system to create a generic socket of type TCP (strean)
 	if ((server_sock =socket(AF_INET,SOCK_STREAM,0)) < 0){
 		DEBUG_PRINT("unable to create tcp socket");
