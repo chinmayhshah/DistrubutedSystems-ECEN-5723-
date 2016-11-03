@@ -39,7 +39,7 @@ File for implementation of a Distrubuted File Client
 //#define NON_BLOCKING
 
 int nbytes;                             // number of bytes send by sendto()
-int sock;                               //this will be our socket
+//int sock;                               //this will be our socket
 char buffer[MAXBUFSIZE];
 
 struct sockaddr_in remote;              //"Internet socket address structure"
@@ -140,10 +140,10 @@ struct configClient config;
 int maxtypesupported=0; //typedef enum HTTPFORMAT{RM,RU,RV}HTTP_FM;
 
 
-int server_sock,client_sock;                           //This will be our socket
-struct sockaddr_in server, client;     //"Internet socket address structure"
-unsigned int remote_length;         //length of the sockaddr_in structure
-int nbytes;                        //number of bytes we receive in our message
+//int server_sock,client_sock;                           //This will be our socket
+//struct sockaddr_in server, client;     //"Internet socket address structure"
+//unsigned int remote_length;         //length of the sockaddr_in structure
+//int nbytes;                        //number of bytes we receive in our message
 
 
 
@@ -153,7 +153,7 @@ int nbytes;                        //number of bytes we receive in our message
 char *configfilename ="dfc.conf"; // take input name 
 
 /*******************************************************************************************
-//Parse a configutation file 
+//Parse a configutation file for Client 
 //
 I/p : File name 
 
@@ -171,7 +171,14 @@ o/p : Structure of data for configuration file
 Basic Start refernece for coding 
 https://www.pacificsimplicity.ca/blog/simple-read-configuration-file-struct-example
 
-Format :
+Format :	
+		#Comment
+		#DFS Configured 
+		Server <DFS Name> <IP>:<PORT>
+		Username <user name>
+		Password <Pass>
+		#Comment
+
 *********************************************************************************************/
 int config_parse(char Filename[MAXCOLSIZE]){
 
@@ -431,65 +438,9 @@ int splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int ma
 		
 
 	return sizeofip;	
-
-	
 }
 
-/*************************************************************
-Send message from  Client to Server
-input 	
-		msg   - String to be transmitted
-		bytes -No of bytes transferred 
-		Type  - Wait for ACK or Not 
-*************************************************************/
-int sendtoServer(char *msg,ssize_t bytes,ACK_TYPE type_ack)
-{
-	ssize_t send_bytes,recv_bytes;
-	int rcvd_packno=0;
-	char ack[ACKMESSAGE];
-	//printf("send to Server %s , %d\n",msg,(int)bytes );
 
-	//Send to Server 
-	if ((send_bytes=sendto(sock,msg,bytes,0,remoteaddr,sizeof(remote))) < bytes)
-	{
-		fprintf(stderr,"Error in sending to clinet in sendtoClient %s %d \n",strerror(errno),(int)send_bytes );
-	}
-
-
-	if(type_ack==ACK){	//If Type is ACK
-		if(recv_bytes = recvfrom(sock,ack,sizeof(ack),0,(struct sockaddr*)&remote,&addr_length)){
-					//printf("ACK packet not found \n");
-		}//If  recv didnt have an error
-		else{
-			//printf("%s\n",ack );			
-			if (!strstr(ack_message,ack))
-			{
-				rcvd_packno=strtol(&ack[3],NULL,10);	//Parse the ack no rcvd 
-			}
-			else//ACK not present in packet 
-			{
-				//printf("ACK not recieved %s\n",ack);		//ACK not recieved 
-				return -1;
-			}		
-		}
-	}	
-	return rcvd_packno	;
-}
-
-//Receive List from Server and Print it
-void listRcv(){
-	// Blocks till bytes are received
-		
-		bzero(buffer,sizeof(buffer));
-		#ifdef NON_BLOCKING
-			if(nbytes = recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr*)&remote,&addr_length)<0){//recv from server and check for non-blocking 
-				fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
-			}
-		#else
-			nbytes = recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr*)&remote,&addr_length);
-		#endif	
-		printf("%s\n", buffer);//Print the list 
-}
 
 
 /*************************************************************************************
@@ -539,442 +490,41 @@ int MD5Cal(char *filename, char *MD5_result)
 	return 0;
 }
 
-
-//Function for Reciving packet - Not Utilized 
-
-ssize_t recv_packet(char *recv_pack,char size_bytes)
-{
-	ssize_t bytes;
-	bytes=recvfrom(sock,recv_pack,size_bytes,0,(struct sockaddr*)&remote,&addr_length);
-	return bytes;
-}
-/****************************************************************************************************
-// Get a file from Server to Client
-
-I/p : filename - File name to be store data in  to client 
-
-O/p :file is rcvd from server
-	 return number of status
-
-Reference for understanding basic udp send:
-https://lms.ksu.edu.sa/bbcswebdav/users/mdahshan/Courses/CEN463/Course-Notes/07-file_transfer_ex.pdf	  
-*****************************************************************************************************/
-int rcvFile (char *filename){
-	
-	int fd; // File decsriptor 
-	ssize_t file_bytes=0;
-	int file_size=0;
-	int rcount=0;//count for send count 
-
-	
-	char *err_indication = "Error"; 
-	char *comp_indication = "Comp"; 
-	char recv_pack[MAXPACKSIZE+1];
-	char packet_no[PACKETNO];
-	char prev_pack_no[PACKETNO];
-	char rcvd_packet_no[PACKETNO];
-	char rcvd_size[SIZEMESSAGE];
-	char recv_frame[MAXFRAMESIZE];
-	int  rcvd_bytes;
-	int  pos_data=0;
-	int  pos_size=0;
-	//int  prev_pack_no=0;
-	char *MD5_Client,*MD5_Server;
-
-	//intial value of 
-	strcpy(rcvd_packet_no,"0");
-
-	//allocate MD5 
-	MD5_Client =(char *)malloc(MD5_DIGEST_LENGTH*2*sizeof(char));
-	if (MD5_Client == NULL)
-	{
-		perror(MD5_Client);
-		return -1;
-
-	}
-	MD5_Server =(char*)malloc(MD5_DIGEST_LENGTH*2*sizeof(char));
-	if (MD5_Server == NULL)
-	{
-		perror(MD5_Server);
-		return -1;
-	}
-	//clear Md5
-	bzero(MD5_Client,sizeof(MD5_Client));
-	bzero(MD5_Server,sizeof(MD5_Server));
-
-
-	//Recieve first packet 	
-	file_bytes = recvfrom(sock,recv_frame,sizeof(recv_frame),0,(struct sockaddr*)&remote,&addr_length);
-
-
-	
-	if (!strchr(recv_frame,'|'))//Check if Packet is file data or normal 
-	{
-		//printf("Cant find | before loop \n");
-		strcpy(recv_pack,recv_frame);
-	}
-
-	
-
-
-	//open the file
-	if (strcmp(recv_pack,err_indication)==0 && file_bytes >0 ){//check for error Message from server
-				file_bytes = recvfrom(sock,recv_pack,sizeof(recv_pack),0,(struct sockaddr*)&remote,&addr_length);
-				printf("\n%s\n",recv_pack );
-				rcount =-1;
-				//return -1;
-			}
-	else if((fd= open(filename,O_CREAT|O_RDWR|O_TRUNC,0666)) <0){//open a file to store the data in file
-		perror(filename);//if can't open
-		return -1;
-	}
-	else // open file successfully ,read file 
-	{
-		//debug 
-		//printf("Rcvx %s\n",filename);
-		//
-		//check if any bytes read 
-		do
-		{
-			//printf("Complete Frame %s\n",recv_frame);
-			//split packet no and data 
-			if (strchr(recv_frame,'|')){
-				//extract packet No
-				pos_size =(int)(strchr(recv_frame,'|') - recv_frame)+1;//posintion of '|'
-				
-				memcpy(rcvd_packet_no,recv_frame,pos_size-1);//packet of data 
-				rcvd_packet_no[pos_size+1]='\0';
-				
-				//extract Size of Packet 
-				pos_data =(int)(strchr(&recv_frame[pos_size],'|') - recv_frame)+1;
-				memcpy(rcvd_size,&recv_frame[pos_size],pos_data-(pos_size));
-				rcvd_size[pos_data+1]='\0';
-				
-				rcvd_bytes=strtol(rcvd_size,NULL,10);
-
-				//extract File Data
-				//printf("%s\n",recv_frame);
-				memcpy(recv_pack,&recv_frame[pos_data],rcvd_bytes);//packet of data 
-				recv_pack[rcvd_bytes]='\0';
-
-				//printf("pos size,pos data %d %d %d\n",pos_size,pos_data,(int)sizeof(recv_frame));
-				//printf("From Server Packet:Size  %s %s\n",rcvd_packet_no,rcvd_size);	
-				//printf("%s\n",recv_pack );
-				//Change the filebytes 
-				//break;
-
-			}
-			else
-			{
-				//printf("Cant find | \n");
-				strcpy(recv_pack,recv_frame);
-			}
-			
-			if (strcmp(recv_pack,comp_indication)==0)//check for File Completion
-			{
-				//printf("\n%s\n",recv_pack );
-				break;
-			}
-			
-		#ifndef RELIABILITY
-			else if(write(fd,recv_pack,rcvd_bytes)<0){//write to file , with strlen as sizeof has larger value 
-						perror("Error for writing to file");
-						rcount =-1;	
-				}
-			else// when write has be done
-			{	
-					//printf("packetno:bytes:written bytes %d:%d:%d\n",rcount,(int)file_bytes,rcvd_bytes );
-					file_size = file_size + rcvd_bytes;
-					strcmp(prev_pack_no,packet_no);		
-		        	rcount++;//recvd packet counter
-		        	//FOmrating ACK|PacketNO
-					bzero(ack_message,sizeof(ack_message));
-					//sprintf(packet_no,"%d",(int)strtol(rcvd_packet_no,NULL,10));
-					strcpy(ack_message,"ACK");
-					strcat(ack_message,rcvd_packet_no);
-					sendtoServer(ack_message,sizeof(ack_message),NOACK);
-
-			}
-	    #else
-	      
-			else if (!strcmp(prev_pack_no,rcvd_packet_no)){//check if packet was already recieved before and ACK was missed 
-					//strcat(ack_message,sprintf(packet_no,"%d",);
-					strcpy(ack_message,"ACK");
-					strcat(ack_message,prev_pack_no);
-					//printf("Resending ACK %s\n",ack_message );
-					sendtoServer(ack_message,sizeof(ack_message),NOACK);	
-			}	
-			else{//if previous packet no is not same as present 
-			
-				if(write(fd,recv_pack,rcvd_bytes)<0){//write to file , with strlen as sizeof has larger value 
-					perror("Error for writing to file");
-					rcount =-1;	
-				}
-				else// when write has be done
-				{
-				
-					//printf("packetno:bytes:written bytes %d:%d:%d\n",rcount,(int)file_bytes,rcvd_bytes );
-					file_size = file_size + rcvd_bytes;
-					
-		        	//printf("packet: \n%s\n",recv_pack);	
-		        	rcount++;//recvd packet counter
-		        	//FOmrating ACK|PacketNO
-					bzero(ack_message,sizeof(ack_message));
-					strcpy(ack_message,"ACK");
-					//sprintf(packet_no,"%d",rcount);
-					sprintf(packet_no,"%d",(int)strtol(rcvd_packet_no,NULL,10));
-					//printf("%s\n",ack_message);
-					strcat(ack_message,packet_no);
-					sendtoServer(ack_message,sizeof(ack_message),NOACK);
-					strcpy(prev_pack_no,rcvd_packet_no);
-
-		        }
-	        
-			}
-		#endif							
-			//clear packets for avoiding extra last packet
-			
-			file_bytes =0 ;
-			pos_data =0;
-			bzero(recv_pack,sizeof(recv_pack));
-			bzero(recv_frame,sizeof(recv_frame));
-		}while(((file_bytes = recvfrom(sock,recv_frame,sizeof(recv_frame),0,(struct sockaddr*)&remote,&addr_length))) >0);//read file 
-		//while (file_bytes=recv_packet(recv_frame,sizeof(recv_frame))>0);
-
-
-		if (rcount >0){				
-				printf("Rcvxd packet: total Bytes %d:%d\n",rcount,(int )file_size);	
-		}	
-		// Close file	
-		if(close(fd) <0)//check if file closed 
-		{
-			perror(filename);
-			rcount =-1;
-		}					
-		else
-		{
-			//printf("%s closed successfully\n",filename );
-		}
-		//Calculate for file at Client end 
-		
-
-		//Receive MD5 value from Server,//Wait for MD5 hash value 
-		if(file_bytes = recvfrom(sock,MD5_Server,MD5_DIGEST_LENGTH*2,0,(struct sockaddr*)&remote,&addr_length)>0){
-			MD5Cal(filename,MD5_Client);
-			//printf("Client: %s\n Server: %s\n",MD5_Client,MD5_Server);
-			//Compare 
-			if(!strcmp(MD5_Client,MD5_Server))
-			{
-				printf("Files Recieved match with Server \n" );	
-			}
-			else
-			{
-				printf("Retry ,Files dont match!!\n");		
-			}
-		}
-		//Acknowledge  
-	}
-	//printf("Completed Rcvxd Routine\n");
-	//reinitialize 
-	free(MD5_Client);
-	free(MD5_Server);
-	
-	bzero(recv_pack,sizeof(recv_pack));
-	bzero(packet_no,sizeof(packet_no));
-	bzero(prev_pack_no,sizeof(prev_pack_no));
-	bzero(rcvd_packet_no,sizeof(rcvd_packet_no));
-	bzero(rcvd_size,sizeof(rcvd_size));
-	bzero(recv_frame,sizeof(recv_frame));
-	rcvd_bytes=0;
-	pos_data=0;
-	pos_size=0;
-	
-
-
-
-	return rcount;
-}
-
-
-/*************************************************************
-// Send a file from Client to Server
-I/p : filename - File name to be pused to server 
-o/p : find and file is pushed to server 
-	  return number of status
-Reference for understanding :
-https://lms.ksu.edu.sa/bbcswebdav/users/mdahshan/Courses/CEN463/Course-Notes/07-file_transfer_ex.pdf	  
-**************************************************************/
-int sendFile (char *filename){
-	
-	int fd; // File decsriptor 
-	ssize_t file_bytes,file_size;
-	int scount=0;//count for send count 
-
-	char *err_indication = "Error";
-	char *comp_indication = "Comp";
-
-	char err_message[ERRMESSAGE] = "File not Present"; 
-	char *MD5_message;
-	char MD5_temp[MD5_DIGEST_LENGTH*2];
-	MD5_message = MD5_temp;
-	char send_pack[MAXPACKSIZE];
-	char send_frame[MAXFRAMESIZE];
-	char send_size[SIZEMESSAGE];
-	int temp_displace=PACKETNO+SIZEMESSAGE;
-	int recvd_ack_no=0;
-	int repeat_count=MAXREPEATCOUNT;
-	int flags = fcntl(sock, F_GETFL);
-	
-	//open the file
-	if((fd= open(filename,O_RDONLY)) <0 ){//open read only file 
-		perror(filename);//if can't open
-		//send to client the error 
-		sendtoServer(err_indication,sizeof(err_indication),NOACK);
-		sendtoServer(err_message,sizeof(err_message),NOACK);
-		return -1;
-	}
-	else // open file successful ,read file 
-	{
-		//read bytes and send 
-		while((file_bytes = read(fd,send_pack,MAXPACKSIZE)) != 0 ){//read data from file 			
-			//Append packet no to packet --Frame -- PACKETNO|PACKETSIZE|PACKETDATA
-			sprintf(send_frame,"%06d|%06d|",scount,(int)file_bytes);
-			memcpy(send_frame+temp_displace,send_pack,file_bytes);//copy the send pack to send frame (** use memset as image files an issue)
-			
-
-			#ifndef RELIABILITY
-				recvd_ack_no=sendtoServer(send_frame,sizeof(send_frame),ACK);	//send frame
-			#else	
-				//RELIABILITY 
-				//Reset to UnBlocking 
-				timeout.tv_sec = 0;
-				timeout.tv_usec = 100000;
-
-				if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0){
-	        		perror("setsockopt failed\n");
-	    		}
-	    		else
-	    		{	//repeat for MAXREPEAT COUNT till acknowledge recieved 
-	    			do
-	    			{
-		    			recvd_ack_no=sendtoServer(send_frame,sizeof(send_frame),ACK);	//send frame
-		    
-		    		}while (recvd_ack_no!=scount && repeat_count-- >=0);	
-		    		if (recvd_ack_no != scount)//if even multiple tries failed 
-		    		{
-		    			//printf("try Again !!Files failing %d times\n",MAXREPEATCOUNT);
-		    			repeat_count=MAXREPEATCOUNT;
-		    		}
-
-		    		else
-		    		{	
-			    		//printf("Send the packet in %d\n",repeat_count );
-			    		repeat_count=MAXREPEATCOUNT;
-			    		//recvd_ack_no=0;
-			    	}	
-	    		}
-	    		//Reset to Blocking 
-	    		timeout.tv_sec = 0;
-				timeout.tv_usec = 0;
-				if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0){
-	        		perror("setsockopt failed\n");
-	    		}
-				//Set it  blocking
-				//fcntl(sock, F_SETFL, flags);
-
-			#endif
-			//update count 
-			scount++;
-			//clearing for new data
-			file_bytes =0;
-			bzero(send_pack,sizeof(send_pack));
-			bzero(send_frame,sizeof(send_frame));
-		}		
-		close(fd);//close file if opened 
-	}
-	sendtoServer(comp_indication,(ssize_t)sizeof(comp_indication),NOACK);	//send Completion of File
-	MD5Cal(filename,MD5_message);
-	//printf("MD5 Message%s\n",MD5_message );
-	//Send MD5 Hash value 
-	sendtoServer(MD5_message,2*MD5_DIGEST_LENGTH,NOACK);
-
-	
-	//printf("No of packets send %d\n",scount );
-	return scount;
-}
-
-
-
-
-
-/* You will have to modify the program below */
-
+//For Socket
+int sock[MAXDFSCOUNT];//No(Sockets) =DFS Server availables
+struct sockaddr_in server[MAXDFSCOUNT];
 
 int main (int argc, char * argv[] ){
+    int i=0;
+    char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
 	
-	/*
-	int *mult_sock=NULL;//to alloacte the client socket descriptor
-	pthread_t client_thread;
-	*/
-	int i=0;
+	//Input of filename for config 
+	if (argc != 2){
+		printf ("USAGE:  <Conf File>\n");
+		exit(1);
+	}
 	
 	//Configuration file before starting the Web Server 
-	DEBUG_PRINT("Reading the config file ");
-	
-
-	maxtypesupported=config_parse("dfc.conf");
+	DEBUG_PRINT("Reading the config file %s",argv[1]);
+	maxtypesupported=config_parse(argv[1]);
 
 	// Print the Configuration 
 	DEBUG_PRINT("Confiuration Obtain");
-	
 	//Check for file support available or not 
-	if (!maxtypesupported)
-	{
+	if (!maxtypesupported){
 		printf("Zero DFS found !! Check Config File\n");
 		exit(-1);
 	}
 	else
-	{	DEBUG_PRINT("DFS Configured");
-		for (i=0;i<maxtypesupported;i++)
-		{
+	{	
+		DEBUG_PRINT("DFS Configured");
+		for (i=0;i<maxtypesupported;i++){
 			//DEBUG_PRINT("%d %s %s",i,config.DFSIP[i],config.DFSPortNo[i]);
 			DEBUG_PRINT("DFS IP:PORT %d %s - %s:%s",i,config.DFSName[i],config.DFSIP[i],config.DFSPortNo[i]);
 		}
 	}	
-	/******************
-	  This code populates the sockaddr_in struct with
-	  the information about our socket
-	 ******************/
-	bzero(&server,sizeof(server));                    //zero the struct
-	server.sin_family = AF_INET;                   //address family
-	//server.sin_port = htons(atoi(argv[1]));        //htons() sets the port # to network byte order
-
-
-	//Check if Port is present or not 
-	/*
-	if (strcmp(config.DFSPortNo,"")){
-		DEBUG_PRINT("Port %s",config.DFSPortNo);
-		if(atoi(config.DFSPortNo) <=1024){
-			printf("\nPort Number less than 1024!! Check configuration file\n");
-			exit(-1);
-		}
-		else
-		{
-			server.sin_port = htons(atoi(config.DFSPortNo));        		//htons() sets the port # to network byte order
-		}	
 		
-	}
-	else
-	{	
-		printf("\nPort Number not found !! Check configuration file");
-		exit(-1);
-	}
-	
-	server.sin_addr.s_addr = INADDR_ANY;           //supplies the IP address of the local machine
-	remote_length = sizeof(struct sockaddr_in);    //size of client packet 
-
-	*/
 	//check if document root directory present 
 	if (strcmp(config.DFCUsername,"")){
 		DEBUG_PRINT("DFCUsername %s",config.DFCUsername);
@@ -990,92 +540,71 @@ int main (int argc, char * argv[] ){
 	}
 	else
 	{	
-		printf("Default File not found !! Check configuration file\n");
-		//exit(-1);
-	}
-
-	//Keepalive for pipelining 
-	/*
-	DEBUG_PRINT("KeepaliveTime %s",config.keep_alive_time);
-	
-	//Causes the system to create a generic socket of type TCP (strean)
-	if ((server_sock =socket(AF_INET,SOCK_STREAM,0)) < 0){
-		DEBUG_PRINT("unable to create tcp socket");
+		printf("User Password not found !! Check configuration file\n");
 		exit(-1);
-	}
-	*/
-	/******************
-	  Once we've created a socket, we must bind that socket to the 
-	  local address and port we've supplied in the sockaddr_in struct
-	 ******************/
-	  /*
-	if (bind(server_sock, (struct sockaddr *)&server, sizeof(server)) < 0){
-		close(server_sock);
-		printf("unable to bind socket\n");
-		exit(-1);
-	}
-	//
-
-	if (listen(server_sock,LISTENQ)<0)
-	{
-		close(server_sock);
-		perror("LISTEN");
-		exit(-1);
-	}
-
-
-	DEBUG_PRINT("Server is running wait for connections");
-
-	//Accept incoming connections 
-	while((client_sock = accept(server_sock,(struct sockaddr *) &client, (socklen_t *)&remote_length))){
-		if(client_sock<0){	
-			perror("accept  request failed");
-			exit(-1);
-			close(server_sock);
-		}
-		DEBUG_PRINT("connection accepted  %d \n",(int)client_sock);	
-		mult_sock = (int *)malloc(1);
-		if (mult_sock== NULL)//allocate a space of 1 
-		{
-			perror("Malloc mult_sock unsuccessful");
-			close(server_sock);
-			exit(-1);
-		}
-		DEBUG_PRINT("Malloc successfully\n");
-		//bzero(mult_sock,sizeof(mult_sock));
-		*mult_sock = client_sock;
-
-		DEBUG_PRINT("connection accepted  %d \n",*mult_sock);	
-		//Create the pthread 
-		if ((pthread_create(&client_thread,NULL,client_connections,(void *)(*mult_sock)))<0){
-			close(server_sock);
-			perror("Thread not created");
-			exit(-1);
-
-		}		
-		*/		
-		/*
-		//as it does  have to wait for it to join thread ,
-		//does not allow multiple connections 
-		if(pthread_join(client_thread, NULL) == 0)
-		 printf("Client Thread done\n");
-		else
-		 perror("Client Thread");
-		 */
-	/*	
-		free(mult_sock);
-		DEBUG_PRINT("Freed");
-
 	}	
-	if (client_sock < 0)
-	{
-		perror("Accept Failure");
-		close(server_sock);
-		exit(-1);
-	}
-	close(server_sock);
-	*/
 
+	//Create multiple Socket and connect them (TCP)
+	for (i=0;i<MAXDFSCOUNT;i++){
+	    if((sock[i] = socket(AF_INET , SOCK_STREAM , 0))<0)//create socket
+	    {
+	        
+	        printf("Issue in Creating Socket,Try Again !! %d\n",sock[i]);
+	        perror("Socket --> Exit ");
+	    	exit(-1);
+	    }
+
+		DEBUG_PRINT("All Sockets created");
+	    //Connect the multiple sockets 
+	    server[i].sin_addr.s_addr = inet_addr(config.DFSIP[i]);
+	    server[i].sin_family = AF_INET;
+	    //server[i].sin_port = htons( config.DFSPortNo[i] );
+	    server[i].sin_port = htons(atoi(config.DFSPortNo[i]));        		//htons() sets the port # to network byte order
+	    
+	    //Connect to remote server
+	    if (connect(sock[i] , (struct sockaddr *)&server[i] , sizeof(server[i])) < 0)
+	    {
+	        perror("Connect failed. Error");
+	        exit(-1);
+	    }
+ 		DEBUG_PRINT("All Sockets connected");
+	   
+    }
+     
+    //keep communicating with server depending on command entered 
+    while(1)
+    {
+        DEBUG_PRINT("Enter message : ");
+        scanf("%s" , message);
+         
+        //Send some data
+        i=0;
+        if( send(sock[i] , message , strlen(message) , 0) < 0)
+        {
+            DEBUG_PRINT("Send failed");
+            return 1;
+        }
+         
+        //Receive a reply from the server
+        
+        if( recv(sock[i] , server_reply , 2000 , 0) < 0)
+        {
+            DEBUG_PRINT("recv failed");
+            break;
+        }
+         
+        DEBUG_PRINT("Server reply :");
+        DEBUG_PRINT("%s",server_reply);
+        
+    }
+     
+    //Create multiple Socket and connect them (TCP)
+	for (i=0;i<MAXDFSCOUNT;i++){ 
+    	close(sock[i]);
+	}
+
+	DEBUG_PRINT("All Sockets are closed");
+    return 0;
 }
-		
+
 

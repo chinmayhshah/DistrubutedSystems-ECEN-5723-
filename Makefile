@@ -8,7 +8,7 @@ CC=gcc
 CDEFS = 
 #flags used during compilation
 CFLAGS= -o
-LDFLAGS= -lcrypto -lssl
+LDFLAGS= -lcrypto -lssl -lpthread
 
 PRODUCT=dfs dfc
 
