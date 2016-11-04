@@ -492,14 +492,13 @@ int MD5Cal(char *filename, char *MD5_result)
 
 
 #define MAXFILESIZE 50000
-#define MAXFILESPLITSIZE MAXFILESIZE/4
 
 
 /*************************************************************************************
 Split Files into multiple files 
 i/p :sourcefilename -  Filename to be split 
 	:parts - No of equal size parts need to be split into 
-	   	
+
 Ref for understanding :http://www.programmingsimplified.com/c-program-merge-two-files
 ***************************************************************************************/
 int splitFile(char *sourcefilename,int parts)
@@ -579,83 +578,83 @@ int splitFile(char *sourcefilename,int parts)
 }
 
 /*************************************************************************************
-Split Files into multiple files 
+Merge  Files into single file from  multiple files 
 i/p - Filename i/p to 
 	-   	
-Ref for understanding :http://stackoverflow.com/questions/20759244/c-code-to-split-files
 ***************************************************************************************/
-int mergeFile(char *sourcefilename,int parts)
+int mergeFile(char *mergedFileName,int parts)
 {
-
- 	//char sourceFileName[MAXPACKSIZE], ch, 
- 	char destFileName[MAXPACKSIZE];
+	char sourceFileName[MAXPACKSIZE];// Source file name
  	int ch=0;
     long int size=0, k=0;
-    int i=0;
-    FILE *sourceFile,*splitFile; //file and temp file
+    int i;
+    FILE *sourceFile,*mergeFile; //file and temp file
 
-    //printf("enter the file you want to split with full path : ");
-    //scanf("%s", fn);
-    //printf("enter the number of parts you want to split the file : ");
-    //scanf("%ld", &n);
-    DEBUG_PRINT("Filename => %s",sourcefilename);
+    DEBUG_PRINT("Filename => %s",mergedFileName);
     DEBUG_PRINT("NO of parts => %d",parts);
 
-    sourceFile=fopen(sourcefilename, "rb");//Open source file name 
-    if (sourceFile==NULL)// if file closed or not
+
+    mergeFile=fopen(mergedFileName, "wb");//Open destn Merge file name in write mode 
+    if (mergeFile==NULL)// if file closed or not
     {
-        printf("couldn't open file");
+        printf("couldn't open file %s",mergedFileName);
         exit(-1);
     }
 
-    // fseek(FILE *stream, long int offset, int whence)
-    fseek(sourceFile, 0, 2);//
-    size = ftell(sourceFile);// Calculate Size of Filename
-    DEBUG_PRINT("Size(File) => %ld\n", size);
-
-    i = 1;
-    k = (int)(size/parts);
-    DEBUG_PRINT("Split Size(File) => %ld\n", k);
+    i = 1;   
     
-    rewind(sourceFile);// Change the pointer back to original
-    sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
-    DEBUG_PRINT("Split File name %s",destFileName);
-    splitFile = fopen(destFileName, "wb");//Open the destincation file
-    if (splitFile==NULL)// if file closed or not
-    {
-        printf("couldn't open file");
-        perror("Destination File Open");
+    
+	sprintf(sourceFileName, "%s.%d", mergedFileName, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+	DEBUG_PRINT(" File name to be merged %s",sourceFileName);
+	sourceFile = fopen(sourceFileName, "rb");//Open the source file 
+	if (sourceFile == NULL)
+	{
+		printf("couldn't open file %s",mergedFileName);
         exit(-1);
-    }
-    DEBUG_PRINT("Here ");
+
+	}
+    
     while(i<=(parts))
     {
-        ch = fgetc(sourceFile);    
-        //if (ch==EOF)//check for end of file 
-        //    break;
-        //DEBUG_PRINT("Read Value => %s\n", ch);        
-        DEBUG_PRINT("Here 2");
-        fputc(ch, splitFile);
-        if(feof(splitFile) )
+    	DEBUG_PRINT("Counter value %d ",i);
+	    if (sourceFile==NULL)// if file opened or not
 	    {
-	    	DEBUG_PRINT("End of File=> File %d",i);
-	        break ;
+	        printf("couldn't open file");
+	        perror("Source File Open");
+	        exit(-1);
 	    }
-        //To check for the size of file written 
-        if (ftell(sourceFile)==(i*k))//check the size of file reached 
-        {
-        	DEBUG_PRINT("Data of  file reached %d",(i*k));
+	    //read each chacracter of file
+	    ch =0;
+        ch = fgetc(sourceFile);    
+        
+        if(feof(sourceFile))
+	    {
+	    	DEBUG_PRINT("Here 3");  	
 		    i = i+1;
-		    DEBUG_PRINT("Closing %s:%d",destFileName,splitFile);
-			fclose(splitFile);
+		    DEBUG_PRINT("End of File=> File upaded %d",i);
+		    DEBUG_PRINT("Closing %s:%d",sourceFileName,sourceFile);
+			fclose(sourceFile);
 			if (i<=(parts)){
-	            sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
-	            splitFile=fopen(destFileName, "wb");
+	            sprintf(sourceFileName, "%s.%d", mergedFileName, i);// Format <sourcefilename>.<i> eg:#file.txt.1
+	            DEBUG_PRINT(" File name to be merged %s",sourceFileName);
+	            sourceFile=fopen(sourceFileName, "rb");
+	            	if (sourceFile == NULL)
+					{
+						printf("couldn't open file %s",mergedFileName);
+				        exit(-1);
+					}
 	        }
-        }
+	    }
+	    else
+	    {
+		    DEBUG_PRINT("Here 2");
+	        fputc(ch, mergeFile);// put in o/p file      
+	    }
+	   
     }
-    if(sourceFile){
-    	fclose(sourceFile);
+    fputc('\n',mergeFile);// add extra new line at end of file as fputch does not add it by itself
+    if(mergeFile){
+    	fclose(mergeFile);
     }	
    
 }
@@ -747,7 +746,10 @@ int main (int argc, char * argv[] ){
 
     DEBUG_PRINT("Split File Name");
 
-    splitFile("test.txt",4);
+    //splitFile("sample.txt",4);
+    mergeFile("sample.txt",4);
+
+    
 
 	DEBUG_PRINT("Completed splitting File name");     
     //keep communicating with server depending on command entered 
