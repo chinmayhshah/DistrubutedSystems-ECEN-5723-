@@ -49,9 +49,6 @@ struct sockaddr_in from_addr;
 int addr_length = sizeof(struct sockaddr);
 char ack_message[ACKMESSAGE];
 
-typedef char type2D[10][MAXCOMMANDSIZE];
-
-
 
 typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
 
@@ -94,19 +91,16 @@ struct timeval timeout={0,0};
 
 typedef char type2D[10][MAXCOMMANDSIZE];
 
-typedef enum HTTPFORMAT{
-							HttpExtra,//Extra Character
-							HttpMethod,//Resource Method
-							HttpURL,// Resource URL
-							HttpVersion //Resource Version 
-						}HTTP_FM;// Resource format
 
-//HTTP Mehthod supported 
-typedef enum HTTPMETHOD{
-							HTTP_GET,//GET
-							HTTP_POST
 
-						}HTTP_METHOD;
+
+//For IP:PORT
+
+typedef enum IPFORMAT{
+							FmtExtra,//Format Extra Character
+							IP,//IP
+							PORT//Port
+						}IP_FM;// IP File format						
 
 //For configuration File
 
@@ -118,13 +112,9 @@ typedef enum CONFIGFORMAT{
 							ConfigAddData //additional data 
 						}CONFIG_FM;// Config File format
 
-//For IP:PORT
 
-typedef enum IPFORMAT{
-							FmtExtra,//Format Extra Character
-							IP,//IP
-							PORT,//Port
-						}IP_FM;// IP File format						
+
+
 
 
 struct configClient{
@@ -134,6 +124,50 @@ struct configClient{
 		char DFCUsername[MAXCOLSIZE];
 		char DFCPassword[MAXCOLSIZE];
  };
+
+
+
+
+// For input command split 
+typedef enum COMMANDLOCATION{
+							CommandExtra,//Extra Character
+							command_location,//Resource Method
+							file_location,// Resource URL
+							
+						}COMMAND_LC;// Resource format
+
+// For Server Client Packet request/data Format and location 
+typedef enum PACKETLOCATION{
+							requestExtra,//Extra Character
+							DFCUserloc,//User Location
+							DFCPassloc,//Password Location
+							DFCCommandloc,//Command Location
+							DFCFileloc,//Command Location
+							DFCDataloc,//Data Location
+							
+						}PACKET_LC;// Resource format
+
+
+//Request/command exchnage format b/w DFS and DFC
+
+struct requestCommandFmt{		
+		char DFCRequestUser[MAXCOLSIZE];
+		char DFCRequestPass[MAXCOLSIZE];
+		char DFCRequestCommand[MAXCOLSIZE];
+		char DFCRequestFile[MAXCOLSIZE];
+		int socket;
+};
+
+//Data exchnage format b/w DFS and DFC
+
+struct DataFmt{		
+		char DFCRequestUser[MAXCOLSIZE];
+		char DFCRequestPass[MAXCOLSIZE];
+		char DFCRequestCommand[MAXCOLSIZE];
+		char DFCRequestFile[MAXCOLSIZE];
+		char DFCData[MAXPACKSIZE];
+		int socket;
+};
 
 
 struct configClient config;
@@ -356,6 +390,93 @@ int config_parse(char Filename[MAXCOLSIZE]){
 
 }
 
+
+
+
+/*************************************************************
+Send message from  Client to Server
+input 	
+		msg   - String to be transmitted
+		bytes -No of bytes transferred 
+		Type  - Wait for ACK or Not 
+*************************************************************/
+		/*
+int sendtoServer(char *msg,ACK_TYPE type_ack,int sock)
+{
+	ssize_t send_bytes,recv_bytes;
+	int rcvd_packno=0;
+	char ack[ACKMESSAGE];
+	//printf("send to Server %s , %d\n",msg,(int)bytes );
+	//Concat the Command to be send 
+
+
+	//Send to Server 
+	if ((send_bytes=write(sock,msg,bytes,sizeof(remote))) < bytes)
+	{
+		fprintf(stderr,"Error in sending to clinet in sendtoClient %s %d \n",strerror(errno),(int)send_bytes );
+	}
+
+
+	if(type_ack==ACK){	//If Type is ACK
+		if(recv_bytes = recvfrom(sock,ack,sizeof(ack),0,(struct sockaddr*)&remote,&addr_length)){
+					//printf("ACK packet not found \n");
+		}//If  recv didnt have an error
+		else{
+			//printf("%s\n",ack );			
+			if (!strstr(ack_message,ack))
+			{
+				rcvd_packno=strtol(&ack[3],NULL,10);	//Parse the ack no rcvd 
+			}
+			else//ACK not present in packet 
+			{
+				//printf("ACK not recieved %s\n",ack);		//ACK not recieved 
+				return -1;
+			}		
+		}
+	}	
+	return rcvd_packno	;
+}
+
+*/
+//Send data to different DFS
+int sendDataToDFS (struct DataFmt sendData)
+{
+
+	char sendMessage[MAXBUFSIZE];
+	sprintf(sendMessage,"%s/%s/%s/%s/%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData);
+	DEBUG_PRINT("Data to Server => %s",sendMessage);
+
+	write(sendData.socket,sendMessage,sizeof(sendMessage));		
+
+}
+
+
+
+
+int sendcommandToDFS (struct requestCommandFmt reqCommand)
+{
+	char sendMessage[MAXBUFSIZE];
+	sprintf(sendMessage,"%s/%s/%s/%s",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCRequestFile);
+	DEBUG_PRINT("Command to Server => %s",sendMessage);
+
+	//Send Command
+	//for (int i = 0; i < MAXDFSCOUNT; ++i)
+	//{
+		/* code */
+		//write(socket[i],sendMessage,sizeof(sendMessage));	
+	//}
+	write(reqCommand.socket,sendMessage,sizeof(sendMessage));	
+
+} 
+
+
+
+
+
+
+
+
+
 /*************************************************************
 //Split string on basis of delimiter 
 //Assumtion is string is ended by a null character
@@ -367,33 +488,25 @@ o/p : splitop - Parsed 2 D array of strings
 Referred as previous code limits number of strings parsed 	  
 http://stackoverflow.com/questions/20174965/split-a-string-and-store-into-an-array-of-strings
 **************************************************************/
-int splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int maxattr)
+int 	splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int maxattr)
 {
 	int sizeofip=1,i=1;
 	char *p=NULL;//token
 	char *temp_str = NULL;
 
 
-	DEBUG_PRINT("value split %d",sizeofip);
+	DEBUG_PRINT("Inout string %s",splitip);
 	
 	if(splitip==NULL || delimiter==NULL){
 		printf("Error\n");
 		return -1;//return -1 on error 
 	}
-	
-	
 	p=strtok(splitip,delimiter);//first token string 
-	
 	//Check other token
 	while(p!=NULL && p!='\n' && sizeofip<maxattr )
-	{
-		
-		
-		temp_str = realloc(*splitop,sizeof(char *)*(sizeofip +1));
-		
-		if(temp_str == NULL){//if reallocation failed	
-
-			
+	{		
+		temp_str = realloc(*splitop,sizeof(char *)*(sizeofip +1));	
+		if(temp_str == NULL){//if reallocation failed				
 			//as previous failed , need to free already allocated 
 			if(*splitop !=NULL ){
 				for (i=0;i<sizeofip;i++)
@@ -418,26 +531,24 @@ int splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int ma
 		strcat(splitop[sizeofip],"\0");
 		DEBUG_PRINT	("%d : %s",sizeofip,splitop[sizeofip]);
 		sizeofip++;
-
 		//get next token 
-		p=strtok(NULL,delimiter);
-		
+		p=strtok(NULL,delimiter);		
 	}
 
 	
 	//if (sizeofip<maxattr || sizeofip>maxattr){
 	if (sizeofip>maxattr+1){
 		DEBUG_PRINT("unsuccessful split %d %d",sizeofip,maxattr);
+
 		return -1;
 	}	
 	else
 	{	
-		//DEBUG_PRINT("successful split %d %d",sizeofip,maxattr);
+		DEBUG_PRINT("successful split %d ",sizeofip);
+		//DEBUG_PRINT("Here 7");
 		return sizeofip;//Done split and return successful }
 	}	
-		
-
-	return sizeofip;	
+	return sizeofip;		
 }
 
 
@@ -585,8 +696,7 @@ i/p - Filename i/p to
 int mergeFile(char *mergedFileName,int parts)
 {
 	char sourceFileName[MAXPACKSIZE];// Source file name
- 	int ch=0;
-    long int size=0, k=0;
+ 	int ch=0; long int size=0, k=0;
     int i;
     FILE *sourceFile,*mergeFile; //file and temp file
 
@@ -616,7 +726,7 @@ int mergeFile(char *mergedFileName,int parts)
     
     while(i<=(parts))
     {
-    	DEBUG_PRINT("Counter value %d ",i);
+
 	    if (sourceFile==NULL)// if file opened or not
 	    {
 	        printf("couldn't open file");
@@ -629,7 +739,7 @@ int mergeFile(char *mergedFileName,int parts)
         
         if(feof(sourceFile))
 	    {
-	    	DEBUG_PRINT("Here 3");  	
+	    
 		    i = i+1;
 		    DEBUG_PRINT("End of File=> File upaded %d",i);
 		    DEBUG_PRINT("Closing %s:%d",sourceFileName,sourceFile);
@@ -647,7 +757,7 @@ int mergeFile(char *mergedFileName,int parts)
 	    }
 	    else
 	    {
-		    DEBUG_PRINT("Here 2");
+		    
 	        fputc(ch, mergeFile);// put in o/p file      
 	    }
 	   
@@ -668,6 +778,8 @@ int main (int argc, char * argv[] ){
     int i=0;
     char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
+	struct DataFmt datatoserver;
+	struct requestCommandFmt requesttoserver;
 	
 	//Input of filename for config 
 	if (argc != 2){
@@ -749,49 +861,133 @@ int main (int argc, char * argv[] ){
     //splitFile("sample.txt",4);
     mergeFile("sample.txt",4);
 
-    
+    char command[MAXCOMMANDSIZE];//Local command storage 
 
 	DEBUG_PRINT("Completed splitting File name");     
     //keep communicating with server depending on command entered 
-    while(1)
-    {
-    	        
-        bzero(message,sizeof(message));
-        sprintf(message,"Message to %s counter %d",config.DFSName[i],i); 
-        DEBUG_PRINT("message to send : %s",message);
-        //Send some data
-        
-        if( send(sock[i] , message , strlen(message) , 0) < 0)
-        {
-            DEBUG_PRINT("Send failed");
-            return 1;
-        }
-         
-        //Receive a reply from the server
-		/*	        
-        if( recv(sock[i%MAXDFSCOUNT] , server_reply , strlen(server_reply), 0) < 0)
-        {
-            DEBUG_PRINT("recv failed");
-            break;
-        }
-         
-        DEBUG_PRINT("Server reply :");
-        DEBUG_PRINT("%s",server_reply);
-        */
-        if (i++ >= (MAXDFSCOUNT-1) ){
-        	i=0;
-        }
-        
-        
-    }
-     
-    //Create multiple Socket and connect them (TCP)
-	for (i=0;i<MAXDFSCOUNT;i++){ 
-    	close(sock[i]);
+	printf("Enter Command\n");
+	printf("GET <Filename> - to get file from DFS\n");
+	printf("PUT <Filename> - to put file to DFS \n");
+	printf("LIST -list files on  DFS server\n");
+	
+	int total_attr_commands;
+	//type2D *action;//for splitting commands 
+	char (*action)[MAXCOLSIZE];
+
+	// assiging standard parameters
+	
+	//copy username 
+	strcpy(datatoserver.DFCRequestUser,config.DFCUsername);
+	strcpy(requesttoserver.DFCRequestUser,config.DFCUsername);
+
+	//copy password 
+	strcpy(requesttoserver.DFCRequestPass,config.DFCPassword);
+	strcpy(datatoserver.DFCRequestPass,config.DFCPassword);
+
+	//copy socket 
+	requesttoserver.socket=datatoserver.socket=sock[0];//assigning only server one socket for now
+	
+
+	while(1)
+	{	
+
+			//Clear the command and request to Client 
+			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
+			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
+			bzero(command,sizeof(command));
+			fgets(command,MAXCOMMANDSIZE,stdin);
+			if ((strlen(command)>0) && (command[strlen(command)-1]=='\n')){
+					command[strlen(command)-1]='\0';
+			}
+			
+			//bzero(ack_recv,sizeof(ack_recv));	
+			//ack_bytes=recvfrom(sock,ack_recv,sizeof(ack_recv),0,(struct sockaddr*)&remote,&addr_length);
+			DEBUG_PRINT("Command %s",command);
+			strcat(command,"\n");
+			int cmpvalue=100;
+			//Split the input q
+			if ((action=malloc(sizeof(action)*MAXCOLSIZE))){	
+				total_attr_commands=0;
+				if((total_attr_commands=splitString(command," ",action,3)>0))
+				{
+	   				DEBUG_PRINT("Command %s => length %d",action[command_location]);
+	   				DEBUG_PRINT("File %s",action[file_location]);
+	   				DEBUG_PRINT("Total Commands %d",total_attr_commands);
+					
+					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
+						//send command
+						DEBUG_PRINT("Inside LIST");
+						strcpy(requesttoserver.DFCRequestCommand,"LIST");
+						sendcommandToDFS(requesttoserver);
+						//sendtoServer(command,strlen(command),NOACK);//send command to server
+						//sendCommand();				
+						//listRcv();								
+					}
+					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+							DEBUG_PRINT("Inside GET");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							strcpy(requesttoserver.DFCRequestCommand,"GET");
+							sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+			  	}	
+				else
+				{
+					printf("Error in Command Split\n");
+					exit(-1);	
+				}
+			}
+			else
+			{
+				perror("Allocation for command ");
+			}
+			
+			DEBUG_PRINT("Deallocate memory for command");
+			//Free the command allocated 
+			if (action!=NULL){
+				//free alloaction of memory 
+				for(i=0;i<total_attr_commands;i++){
+					free((*action)[i]);
+				}
+				free(action);//clear  the request recieved 
+			}
+
+/*
+	    bzero(message,sizeof(message));
+	    sprintf(message,"Message to %s counter %d",config.DFSName[i],i); 
+	    DEBUG_PRINT("message to send : %s",message);
+	    //Send some data
+	    
+	    if( send(sock[i] , message , strlen(message) , 0) < 0)
+	    {
+	        DEBUG_PRINT("Send failed");
+	        return 1;
+	    }
+	     
+	    if (i++ >= (MAXDFSCOUNT-1) ){
+	    	i=0;
+	    }             
+	    
+*/	     
+	    
+
+//	    
 	}
 
-	DEBUG_PRINT("All Sockets are closed");
-    return 0;
+	//Create multiple Socket and connect them (TCP)
+		for (i=0;i<MAXDFSCOUNT;i++){ 
+	    	close(sock[i]);
+		}
+
+		DEBUG_PRINT("All Sockets are closed");
+
+	return 0;
+
 }
-
-
