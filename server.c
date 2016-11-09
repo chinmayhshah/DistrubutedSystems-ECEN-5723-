@@ -921,7 +921,7 @@ int main (int argc, char * argv[] ){
 	//char command[MAXBUFSIZE];             //a command to store our received message
 	int i=0;
 	int *mult_sock=NULL;//to alloacte the client socket descriptor
-	pthread_t client_thread;
+	pthread_t DFS_thread[MAXDFSCOUNT];
 	
 	/* You will have to modify the program below */
 
@@ -1053,13 +1053,15 @@ int main (int argc, char * argv[] ){
 		*mult_sock = client_sock;
 
 		DEBUG_PRINT("connection accepted  %d \n",*mult_sock);	
+		/*
 		//Create the pthread 
 		if ((pthread_create(&client_thread,NULL,client_connections,(void *)(*mult_sock)))<0){
 			close(server_sock);
 			perror("Thread not created");
 			exit(-1);
 
-		}				
+		}			
+		*/	
 		/*
 		//as it does  have to wait for it to join thread ,
 		//does not allow multiple connections 

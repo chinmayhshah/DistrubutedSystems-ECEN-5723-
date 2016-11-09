@@ -23,6 +23,7 @@ File for implementation of a Distrubuted File Client
 #include <openssl/md5.h>
 #include <sys/time.h>
 #include <sys/time.h>
+#include <pthread.h> // For threading , require change in Makefile -lpthread
 
 
 #define MAXBUFSIZE 60000
@@ -769,17 +770,131 @@ int mergeFile(char *mergedFileName,int parts)
    
 }
 
+//Input from user in a while loop 
+char command[MAXCOMMANDSIZE];//Local command storage 
+struct DataFmt datatoserver;
+struct requestCommandFmt requesttoserver;
 
 //For Socket
 int sock[MAXDFSCOUNT];//No(Sockets) =DFS Server availables
 struct sockaddr_in server[MAXDFSCOUNT];
+int total_attr_commands;
+//type2D *action;//for splitting commands 
+char (*action)[MAXCOLSIZE];
 
+//Call back function for thread 
+//Input is the thread id(i) - maps to the DFSIP and DFSPORT 
+void *DFSThreadServed(void *Id){
+
+			int DFSId = (int)Id;
+
+			
+			DEBUG_PRINT("DFS Id connection %d\n",(int)DFSId);
+			//Create multiple Socket and connect them (TCP)
+			//for (i=0;i<MAXDFSCOUNT;i++){
+			    //if((sock[i] = socket(AF_INET , SOCK_STREAM , 0))<0)//create socket
+		    //{
+			if ((sock[DFSId]= socket(AF_INET , SOCK_STREAM , 0))<0){
+                printf("Issue in Creating Socket,Try Again !! %d\n",sock[DFSId]);
+		        perror("Socket --> Exit ");			        
+		    	//exit(-1); // what needs to be done ?
+	    		return -1;
+	    	}
+		    //}
+		    DEBUG_PRINT("created SOCKet %d ",sock[DFSId]);
+			
+		    //Connect the multiple sockets 
+		    server[DFSId].sin_addr.s_addr = inet_addr(config.DFSIP[DFSId]);
+		    server[DFSId].sin_family = AF_INET;
+		    //server[i].sin_port = htons( config.DFSPortNo[i] );
+		    server[DFSId].sin_port = htons(atoi(config.DFSPortNo[DFSId]));        		//htons() sets the port # to network byte order
+		    
+		    //Connect to remote server
+		    if (connect(sock[DFSId] , (struct sockaddr *)&server[DFSId] , sizeof(server[DFSId])) < 0)
+		    {
+		        perror("Connect failed. Error");
+		        //exit(-1);
+		        return -1;// Return as Socket is not up 
+		    }
+	 		DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
+			   
+		    
+		    DEBUG_PRINT("All Sockets created");
+		    DEBUG_PRINT("All Sockets connected");
+		    //i=0;
+
+		    
+			//copy socket 
+			requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
+			
+			//compare the input command and perform necessary action inside thread  		
+			if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
+				//send command
+				DEBUG_PRINT("Inside Thread %d LIST",(int)DFSId);
+				//strcpy(requesttoserver.DFCRequestCommand,"LIST");
+				sendcommandToDFS(requesttoserver);
+				//sendtoServer(command,strlen(command),NOACK);//send command to server
+				//sendCommand();				
+				//listRcv();								
+			}
+			else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+						
+						DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);
+						//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
+						//send command
+						//DEBUG_PRINT("File Name %s",threadaction[file_location]);
+						//strcpy(requesttoserver.DFCRequestCommand,"GET");
+						sendcommandToDFS(requesttoserver);
+
+							//if(rcvFile(action[file_location]) <0){	
+							//	printf("Error in get!!!\n");
+								
+							//} v
+					
+		  	}
+		  	else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+						
+						DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);
+						//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
+						//send command
+						//DEBUG_PRINT("File Name %s",threadaction[file_location]);
+						//strcpy(requesttoserver.DFCRequestCommand,"GET");
+						sendcommandToDFS(requesttoserver);
+
+							//if(rcvFile(action[file_location]) <0){	
+							//	printf("Error in get!!!\n");
+								
+							//} v
+					
+		  	}
+	
+		//Close multiple Socket 
+		shutdown (sock[DFSId], SHUT_RDWR);         //All further send and recieve operations are DISABLED...
+    	close(sock[DFSId]);
+    	sock[DFSId]=-1;
+    
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+			
 int main (int argc, char * argv[] ){
-    int i=0;
+    int i=0,c=0;
     char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
-	struct DataFmt datatoserver;
-	struct requestCommandFmt requesttoserver;
+	
+	pthread_t DFSThread[MAXDFSCOUNT];
 	
 	//Input of filename for config 
 	if (argc != 2){
@@ -824,57 +939,11 @@ int main (int argc, char * argv[] ){
 	{	
 		printf("User Password not found !! Check configuration file\n");
 		exit(-1);
-	}	
+	}//Configuratoin Complete 
 
-	//Create multiple Socket and connect them (TCP)
-	for (i=0;i<MAXDFSCOUNT;i++){
-	    if((sock[i] = socket(AF_INET , SOCK_STREAM , 0))<0)//create socket
-	    {
-	        
-	        printf("Issue in Creating Socket,Try Again !! %d\n",sock[i]);
-	        perror("Socket --> Exit ");
-	    	exit(-1);
-	    }
-	    DEBUG_PRINT("counter %d created SOCKet %d ",i,sock[i]);
-		
-	    //Connect the multiple sockets 
-	    server[i].sin_addr.s_addr = inet_addr(config.DFSIP[i]);
-	    server[i].sin_family = AF_INET;
-	    //server[i].sin_port = htons( config.DFSPortNo[i] );
-	    server[i].sin_port = htons(atoi(config.DFSPortNo[i]));        		//htons() sets the port # to network byte order
-	    
-	    //Connect to remote server
-	    if (connect(sock[i] , (struct sockaddr *)&server[i] , sizeof(server[i])) < 0)
-	    {
-	        perror("Connect failed. Error");
-	        exit(-1);
-	    }
- 		DEBUG_PRINT("connected SOCKet %d",sock[i]);
-	   
-    }
-    DEBUG_PRINT("All Sockets created");
-    DEBUG_PRINT("All Sockets connected");
-    i=0;
 
-    DEBUG_PRINT("Split File Name");
-
-    //splitFile("sample.txt",4);
-    mergeFile("sample.txt",4);
-
-    char command[MAXCOMMANDSIZE];//Local command storage 
-
-	DEBUG_PRINT("Completed splitting File name");     
-    //keep communicating with server depending on command entered 
-	printf("Enter Command\n");
-	printf("GET <Filename> - to get file from DFS\n");
-	printf("PUT <Filename> - to put file to DFS \n");
-	printf("LIST -list files on  DFS server\n");
-	
-	int total_attr_commands;
-	//type2D *action;//for splitting commands 
-	char (*action)[MAXCOLSIZE];
-
-	// assiging standard parameters
+    
+	// assiging standard parameters of client 
 	
 	//copy username 
 	strcpy(datatoserver.DFCRequestUser,config.DFCUsername);
@@ -884,28 +953,42 @@ int main (int argc, char * argv[] ){
 	strcpy(requesttoserver.DFCRequestPass,config.DFCPassword);
 	strcpy(datatoserver.DFCRequestPass,config.DFCPassword);
 
-	//copy socket 
-	requesttoserver.socket=datatoserver.socket=sock[0];//assigning only server one socket for now
+	DEBUG_PRINT("User => Password ", requesttoserver.DFCRequestUser,requesttoserver.DFCRequestPass);
 	
+	//Test  of file functions 
+	//splitFile("sample.txt",4);
+    //mergeFile("sample.txt",4);
 
+
+	DEBUG_PRINT("Completed splitting File name");     
+    //keep communicating with server depending on command entered 
+	printf("Enter Command\n");
+	printf("GET <Filename> - to get file from DFS\n");
+	printf("PUT <Filename> - to put file to DFS \n");
+	printf("LIST -list files on  DFS server\n");
+	
+		
 	while(1)
-	{	
+	{//start of while 
 
 			//Clear the command and request to Client 
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
 			bzero(command,sizeof(command));
+			//wait for input from user 
 			fgets(command,MAXCOMMANDSIZE,stdin);
 			if ((strlen(command)>0) && (command[strlen(command)-1]=='\n')){
 					command[strlen(command)-1]='\0';
-			}
-			
+			}	
+
+
 			//bzero(ack_recv,sizeof(ack_recv));	
 			//ack_bytes=recvfrom(sock,ack_recv,sizeof(ack_recv),0,(struct sockaddr*)&remote,&addr_length);
-			DEBUG_PRINT("Command %s",command);
 			strcat(command,"\n");
+			DEBUG_PRINT("Command %s",command);
 			int cmpvalue=100;
-			//Split the input q
+
+			//Split the input from user 
 			if ((action=malloc(sizeof(action)*MAXCOLSIZE))){	
 				total_attr_commands=0;
 				if((total_attr_commands=splitString(command," ",action,3)>0))
@@ -918,7 +1001,7 @@ int main (int argc, char * argv[] ){
 						//send command
 						DEBUG_PRINT("Inside LIST");
 						strcpy(requesttoserver.DFCRequestCommand,"LIST");
-						sendcommandToDFS(requesttoserver);
+						//sendcommandToDFS(requesttoserver);
 						//sendtoServer(command,strlen(command),NOACK);//send command to server
 						//sendCommand();				
 						//listRcv();								
@@ -929,7 +1012,22 @@ int main (int argc, char * argv[] ){
 							strcpy(requesttoserver.DFCRequestFile,action[file_location]);
 							//send command
 							strcpy(requesttoserver.DFCRequestCommand,"GET");
-							sendcommandToDFS(requesttoserver);
+							//sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+
+					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+							DEBUG_PRINT("Inside PUT");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							strcpy(requesttoserver.DFCRequestCommand,"PUT");
+							//sendcommandToDFS(requesttoserver);
 
 								//if(rcvFile(action[file_location]) <0){	
 								//	printf("Error in get!!!\n");
@@ -948,7 +1046,32 @@ int main (int argc, char * argv[] ){
 			{
 				perror("Allocation for command ");
 			}
+
+
+
+			//Create the thread for all the communication with DFS Servers
+			for (c=0;c<MAXDFSCOUNT;c++ ){
+				if ((pthread_create(&DFSThread[c],NULL,DFSThreadServed,(void *)c))<0){
+					//close(server_sock);
+					perror("Thread not created");
+					exit(-1);
+
+				}	
 			
+			}
+			//Waiting for Join of all threads
+			for (c=0;c<MAXDFSCOUNT;c++){
+				if(pthread_join(DFSThread[c], NULL) == 0)
+				 {
+				  DEBUG_PRINT("Thread %d completed\n",c);
+				 }	
+				 else
+				 {
+				   perror(" Thread Join");
+				 }
+			}	
+			DEBUG_PRINT("Thread join Completed \n");
+
 			DEBUG_PRINT("Deallocate memory for command");
 			//Free the command allocated 
 			if (action!=NULL){
@@ -959,35 +1082,35 @@ int main (int argc, char * argv[] ){
 				free(action);//clear  the request recieved 
 			}
 
-/*
-	    bzero(message,sizeof(message));
-	    sprintf(message,"Message to %s counter %d",config.DFSName[i],i); 
-	    DEBUG_PRINT("message to send : %s",message);
-	    //Send some data
-	    
-	    if( send(sock[i] , message , strlen(message) , 0) < 0)
-	    {
-	        DEBUG_PRINT("Send failed");
-	        return 1;
-	    }
-	     
-	    if (i++ >= (MAXDFSCOUNT-1) ){
-	    	i=0;
-	    }             
-	    
-*/	     
-	    
-
-//	    
-	}
-
-	//Create multiple Socket and connect them (TCP)
-		for (i=0;i<MAXDFSCOUNT;i++){ 
-	    	close(sock[i]);
-		}
-
-		DEBUG_PRINT("All Sockets are closed");
-
+			
+		
+	}//While end
+	
 	return 0;
 
+	
 }
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+	
