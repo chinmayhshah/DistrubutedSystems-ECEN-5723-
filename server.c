@@ -71,6 +71,15 @@ struct timeval timeout={0,0};
                                 __LINE__, __FUNCTION__, ##args); } while (0)
 
 
+
+//For IP:PORT
+
+typedef enum IPFORMAT{
+							FmtExtra,//Format Extra Character
+							IP,//IP
+							PORT//Port
+						}IP_FM;// IP File format						
+
 //For configuration File
 
 typedef enum CONFIGFORMAT{
@@ -81,10 +90,53 @@ typedef enum CONFIGFORMAT{
 							ConfigAddData //additional data 
 						}CONFIG_FM;// Config File format
 
+// For input command split 
+typedef enum COMMANDLOCATION{
+							CommandExtra,//Extra Character
+							command_location,//Resource Method
+							file_location,// Resource URL
+							
+						}COMMAND_LC;// Resource format
+
+// For Server Client Packet request/data Format and location 
+typedef enum PACKETLOCATION{
+							requestExtra,//Extra Character
+							DFCUserloc,//User Location
+							DFCPassloc,//Password Location
+							DFCCommandloc,//Command Location
+							DFCFileloc,//Command Location
+							DFCDataloc,//Data Location
+							
+						}PACKET_LC;// Resource format
+
+
+//Request/command exchnage format b/w DFS and DFC
+
+struct requestCommandFmt{		
+		char DFCRequestUser[MAXCOLSIZE];
+		char DFCRequestPass[MAXCOLSIZE];
+		char DFCRequestCommand[MAXCOLSIZE];
+		char DFCRequestFile[MAXCOLSIZE];
+		int socket;
+};
+
+//Data exchnage format b/w DFS and DFC
+
+struct DataFmt{		
+		char DFCRequestUser[MAXCOLSIZE];
+		char DFCRequestPass[MAXCOLSIZE];
+		char DFCRequestCommand[MAXCOLSIZE];
+		char DFCRequestFile[MAXCOLSIZE];
+		char DFCData[MAXPACKSIZE];
+		int socket;
+};
+
+
+
 //For IP:PORT
 
 typedef enum CREDENTIALS{
-							FmtExtra,//Format Extra Character
+							FmtCreExtra,//Format Extra Character
 							DFC_username,//Client User name
 							DFC_password,//Client Password
 						}CREDENTIALS_FMT;// IP File format						
@@ -114,7 +166,7 @@ unsigned int remote_length;         //length of the sockaddr_in structure
 int nbytes;                        //number of bytes we receive in our message
 char ack_message[ACKMESSAGE];
 
-
+int *mult_sock=NULL;//to alloacte the client socket descriptor
 
 /*************************************************************
 //Split string on basis of delimiter 
@@ -379,18 +431,20 @@ int MD5Cal(char *filename, char *MD5_result)
 /*************************************************************
 Send message recieved to Client 
 *************************************************************/
-/*
+
 int sendtoClient(char *msg,ssize_t bytes,ACK_TYPE ack_type)
 {
 	ssize_t send_bytes,recv_bytes;
 	int rcvd_packno=0;
 	char ack[ACKMESSAGE];
 	//printf("sendtoClient %s , %d\n",msg,(int)bytes );
-	if ((send_bytes=sendto(sock,msg,bytes,0,(struct sockaddr*)&sin,remote_length)) < bytes)
+	if((send_bytes=send(mult_sock,msg,strlen(msg),0))< bytes)
+	//if ((send_bytes=sendto(sock,msg,bytes,0,(struct sockaddr*)&sin,remote_length)) < bytes)
 	{
 		fprintf(stderr,"Error in sending to clinet in sendtoClient %s %d \n",strerror(errno),(int)send_bytes );
 	}
 	//check for ACK
+	/*
 	if(ack_type==ACK){	
 
 		//Wait for Acknowledege 	   
@@ -411,6 +465,7 @@ int sendtoClient(char *msg,ssize_t bytes,ACK_TYPE ack_type)
 			}		
 		}
 	}	
+	*/
 	return rcvd_packno	;
 
 }
@@ -422,31 +477,40 @@ void exitServer(){
 	close(sock);
 }
 
-*/
+
 /*************************************************************
-List the files on local directory and send file details to server 
+List the files on local directory of user and send all file parts 
+details to server 
+
 o/p : list of files in present directory posted to client 
+
 Ref:http://www.lemoda.net/c/list-directory/
 **************************************************************/
-/*
-int list(){
+
+int list(char * directory,int listsock){
 	DIR * d;
-	char * directory = "."; // by default present directory
-	char * listtosend ;
+	//char * directory = "."; // by default present directory
+	char  * listtosend=NULL ;
 	//open directory 
+	DEBUG_PRINT("In LIST => directory %s",directory);
 	d = opendir (directory);
 	if (!d){
 		fprintf(stderr,"Error in opening directory %s\n",strerror(errno));
-		sendtoClient(strerror(errno),(ssize_t)sizeof(strerror(errno)),NOACK);
+		//sendtoClient(strerror(errno),(ssize_t)sizeof(strerror(errno)),NOACK);
 		return -1;
 	}
 
+	
+
 	listtosend = (char *)calloc(MAXBUFSIZE,sizeof(char));
 	//memset(listtosend,NULL,MAXBUFSIZE);
+	
 	if (listtosend <0 ){
 		fprintf(stderr,"Error in allocating memory %s\n",strerror(errno));
 		return -1;
 	}
+	bzero(listtosend,strlen(listtosend));
+	DEBUG_PRINT("Check LIST(should be blank) send => %s",listtosend);
 	while(1){
 		struct  dirent *listfiles;
 		//ref: http://nxmnpg.lemoda.net/3/readdir
@@ -456,28 +520,32 @@ int list(){
 		}
 		
 		if(!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0)){//excluding present and previous dir
+			DEBUG_PRINT("File %s",listfiles->d_name);
 			strcat(listtosend,listfiles->d_name);
 			strcat(listtosend,"\t");
+			DEBUG_PRINT("LIST concat %s",listtosend);
 		}
 	}
 	//close the directory 
 	if(closedir(d)){
 		fprintf(stderr,"Error in closing directory %s\n",strerror(errno));
-		sendtoClient(strerror(errno),(ssize_t)sizeof(strerror(errno)),NOACK);
+		//sendtoClient(strerror(errno),(ssize_t)sizeof(strerror(errno)),NOACK);
 		return -1;
 	}
-	//printf("%s\t",listtosend);
-	ssize_t send_bytes;
-	//if ((send_bytes=sendto(sock,msg,bytes,0,(struct sockaddr*)&sin,remote_length)) < bytes)
-	if ((send_bytes=sendto(sock,listtosend,strlen(listtosend),0,(struct sockaddr*)&sin,remote_length)) < sizeof(listtosend))
+	
+	DEBUG_PRINT(" socket => %d ",listsock);
+	DEBUG_PRINT(" directory=> %s send => %s,",directory,listtosend);
+	//Send the files to client 
+	//Rectify the 
+	if((send(listsock,listtosend,strlen(listtosend),0))<0)		
 	{
 		fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
 	}
+	
 	//sendtoClient(listtosend,(ssize_t)sizeof(listtosend));
 	free(listtosend);
 	return 0;//sucess 	
 }
-*/
 
 /*************************************************************
 // Get a file from Client to Server
@@ -821,6 +889,8 @@ void *client_connections(void *client_sock_id){
 }
 */
 
+char (*action)[MAXCOLSIZE];
+
 void *client_connections(void *client_sock_id)
 {
 	
@@ -830,20 +900,202 @@ void *client_connections(void *client_sock_id)
 	ssize_t read_bytes=0;
 	char message_client[MAXPACKSIZE];//store message from client 
 	char message_bkp[MAXPACKSIZE];//store message from client 
-	char (*split_attr)[MAXCOLSIZE];
+	char command[MAXPACKSIZE];
+	char (*packet)[MAXCOLSIZE];
+	char directory[MAXCOLSIZE]=".";
 	DEBUG_PRINT("passed Client connection %d\n",(int)thread_sock);
+	DEBUG_PRINT("in client connections dir : %s",directory);
+		//Clear the command and request to Client 
+		bzero(message_client,sizeof(message_client));
 
-	
-
-	
+		
 
 		// Recieve the message from client  and reurn back to client 
 		if((read_bytes =recv(thread_sock,message_client,MAXPACKSIZE,0))>0){
 
 			//printf("request from client %s\n",message_client );
 			strcpy(message_bkp,message_client);//backup of orginal message 
-			DEBUG_PRINT("Message => %s \n",message_client );
 			DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
+			DEBUG_PRINT("Message from Client => %s \n",message_client );
+
+			if ((strlen(message_client)>0) && (message_client[strlen(message_client)-1]=='\n')){
+					message_client[strlen(message_client)-1]='\0';
+			}
+
+			//
+				if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
+				total_attr_commands=0;
+				if((total_attr_commands=splitString(message_client,"/",packet,5)>0))
+				{
+	   				DEBUG_PRINT("User %s => length %d",packet[DFCUserloc]);
+	   				DEBUG_PRINT("Password %s",packet[DFCPassloc]);
+	   				//DEBUG_PRINT("Total Commands %d",total_attr_commands);
+					
+					if ((strncmp(packet[DFCCommandloc],"LIST",strlen("LIST"))==0)){
+						//send command
+						DEBUG_PRINT("Inside LIST");
+						//bzero(directory,strlen(directory));
+						strncat(directory,config.DFSdirectory,strlen(config.DFSdirectory));
+						strcat(directory,"/");
+						strncat(directory,packet[DFCUserloc],strlen(packet[DFCUserloc]));
+						strcat(directory,"/");
+						DEBUG_PRINT("directory : %s",directory);
+						//strncpy(directory,packet[DFCUserloc]);
+						list(directory,thread_sock);
+						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
+						//sendcommandToDFS(requesttoserver);
+						//sendtoServer(command,strlen(command),NOACK);//send command to server
+						//sendCommand();				
+						//listRcv();								
+					}
+					else if ((strncmp(packet[DFCCommandloc],"GET",strlen("GET")))==0){
+							DEBUG_PRINT("Inside GET");
+							DEBUG_PRINT("File Name %s",packet[DFCFileloc]);
+							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							//strcpy(requesttoserver.DFCRequestCommand,"GET");
+							//sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+
+					else if ((strncmp(packet[DFCCommandloc],"PUT",strlen("PUT")))==0){
+							DEBUG_PRINT("Inside PUT");
+							DEBUG_PRINT("File Name %s",packet[DFCFileloc]);
+							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							//strcpy(requesttoserver.DFCRequestCommand,"PUT");
+							//sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+			  	}	
+				else
+				{
+					printf("Error in Command Split\n");
+					exit(-1);	
+				}
+			}
+			else
+			{
+				perror("Allocation for command ");
+			}
+
+
+
+
+			/*
+			action = &temp;
+			bzero(command,sizeof(command));
+			bzero(action,sizeof(action));	
+			
+			//waits for an incoming message
+			nbytes = recvfrom(sock,command,sizeof(command),0,(struct sockaddr*)&sin,&remote_length);
+			if ((strlen(command)>0) && (command[strlen(command)-1]=='\n')){
+					command[strlen(command)-1]='\0';
+			}
+			//memcpy(command,command,sizeof(command)-1);			
+			if(garbage_count)
+			{
+				check_bytes=0;
+			}
+			sendtoClient(ack_message,sizeof(ack_message),NOACK);
+			//Messaged received successfully
+			//printf("\nRxcv command : %s bytes %d \n",command,nbytes );
+			strcat(command,"\0");
+			if (nbytes >0){
+					total_attr_commands=splitString(command," ",action);	
+						if(total_attr_commands>=0)
+						{
+								//printf("Command not supported\n");
+								
+							int count=0;
+							action = &temp;
+							garbage_count++;
+							//printf("Action : %s\n",**action );
+							//Check type of command
+							if (strcmp(**action,"ls")==0){							
+										**action++;//gr
+										//printf("value after ls :%s\n", **action);
+										if (strlen(**action)>check_bytes){
+										//	printf("Command not supported\n");
+											sendtoClient("Command not supported",sizeof("Command not supported"),NOACK);							
+										}	
+										else if(list()<0){
+										//		printf("Error in listing!!!\n");
+												sendtoClient("Error",sizeof("Error"),NOACK);
+											}		
+									}
+							else if (strcmp(**action,"get")==0){
+										//printf("in get\n");
+										**action++;//gr
+										if(sendFile(**action) <0){	
+											//printf("Error in get!!!\n");
+											sendtoClient("Error",sizeof("Error"),NOACK);
+										}
+									}
+							else if (strcmp(**action,"put")==0){
+										//printf("in put\n");
+										**action++;
+										//printf("File %s\n",**action);
+										if(rcvFile(**action) <0){	
+											//printf("Error in put!!!\n");
+											//sendtoClient("Error");
+										}
+									}
+							else if (strcmp(**action,"exit")==0){
+										printf("Exiting server .........\n");
+										close(sock);
+										break;
+									}
+							else 	{
+										sendtoClient(command,sizeof(command),NOACK);
+										//printf("Command not supported\n");
+									}
+							//clearing the split value 		
+							bzero(action,sizeof(action));		
+						}	
+							
+			}
+
+			//sendtoClient(msg);
+		}
+			
+		//close the socket 
+		close(sock);
+	*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+			
 			/*			
 			if ((split_attr=malloc(sizeof(split_attr)*MAXCOLSIZE))){	
 				strcpy(split_attr[HttpVersion],"HTTP/1.1");//Default
@@ -920,8 +1172,9 @@ void *client_connections(void *client_sock_id)
 int main (int argc, char * argv[] ){
 	//char command[MAXBUFSIZE];             //a command to store our received message
 	int i=0;
-	int *mult_sock=NULL;//to alloacte the client socket descriptor
-	pthread_t DFS_thread[MAXDFSCOUNT];
+	
+	//pthread_t DFS_thread[MAXDFSCOUNT];
+	pthread_t client_thread;
 	
 	/* You will have to modify the program below */
 
@@ -1053,7 +1306,7 @@ int main (int argc, char * argv[] ){
 		*mult_sock = client_sock;
 
 		DEBUG_PRINT("connection accepted  %d \n",*mult_sock);	
-		/*
+		
 		//Create the pthread 
 		if ((pthread_create(&client_thread,NULL,client_connections,(void *)(*mult_sock)))<0){
 			close(server_sock);
@@ -1061,7 +1314,7 @@ int main (int argc, char * argv[] ){
 			exit(-1);
 
 		}			
-		*/	
+			
 		/*
 		//as it does  have to wait for it to join thread ,
 		//does not allow multiple connections 

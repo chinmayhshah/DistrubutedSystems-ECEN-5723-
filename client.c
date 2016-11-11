@@ -24,7 +24,7 @@ File for implementation of a Distrubuted File Client
 #include <sys/time.h>
 #include <sys/time.h>
 #include <pthread.h> // For threading , require change in Makefile -lpthread
-
+#include <semaphore.h> // For using semaphore
 
 #define MAXBUFSIZE 60000
 #define MAXPACKSIZE 1000
@@ -56,6 +56,20 @@ typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
 
 //Time set for Time out 
 struct timeval timeout={0,0};     
+
+
+
+
+//Using Mutex
+//sem_t semDFS[MAXDFSCOUNT];
+pthread_mutex_t thread_mutex;
+
+
+
+
+
+
+
 /* You will have to modify the program below */
 #define LISTENQ 1000 
 #define SERV_PORT 3000
@@ -689,6 +703,9 @@ int splitFile(char *sourcefilename,int parts)
    
 }
 
+
+
+
 /*************************************************************************************
 Merge  Files into single file from  multiple files 
 i/p - Filename i/p to 
@@ -781,12 +798,15 @@ struct sockaddr_in server[MAXDFSCOUNT];
 int total_attr_commands;
 //type2D *action;//for splitting commands 
 char (*action)[MAXCOLSIZE];
-
+char list[MAXPACKSIZE][MAXCOLSIZE];// To store list common between all threads
+int list_count=0;
+int resource_mutex=1;
 //Call back function for thread 
 //Input is the thread id(i) - maps to the DFSIP and DFSPORT 
 void *DFSThreadServed(void *Id){
 
 			int DFSId = (int)Id;
+			
 
 			
 			DEBUG_PRINT("DFS Id connection %d\n",(int)DFSId);
@@ -809,65 +829,84 @@ void *DFSThreadServed(void *Id){
 		    //server[i].sin_port = htons( config.DFSPortNo[i] );
 		    server[DFSId].sin_port = htons(atoi(config.DFSPortNo[DFSId]));        		//htons() sets the port # to network byte order
 		    
-		    //Connect to remote server
-		    if (connect(sock[DFSId] , (struct sockaddr *)&server[DFSId] , sizeof(server[DFSId])) < 0)
-		    {
-		        perror("Connect failed. Error");
-		        //exit(-1);
-		        return -1;// Return as Socket is not up 
-		    }
-	 		DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
-			   
 		    
-		    DEBUG_PRINT("All Sockets created");
-		    DEBUG_PRINT("All Sockets connected");
-		    //i=0;
+			pthread_mutex_lock(&thread_mutex);//lock mutex	
+			DEBUG_PRINT("Locked Mutex and connect socket ");
+				    //Connect to remote server
+				    if (connect(sock[DFSId] , (struct sockaddr *)&server[DFSId] , sizeof(server[DFSId])) < 0)
+				    {
+				        perror("Connect failed. Error");
+				        //exit(-1);
+				        return -1;// Return as Socket is not up 
+				    }
+			 		DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
+				    //i=0;
 
-		    
-			//copy socket 
-			requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
-			
-			//compare the input command and perform necessary action inside thread  		
-			if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
-				//send command
-				DEBUG_PRINT("Inside Thread %d LIST",(int)DFSId);
-				//strcpy(requesttoserver.DFCRequestCommand,"LIST");
-				sendcommandToDFS(requesttoserver);
-				//sendtoServer(command,strlen(command),NOACK);//send command to server
-				//sendCommand();				
-				//listRcv();								
-			}
-			else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
-						
-						DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);
-						//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
-						//send command
-						//DEBUG_PRINT("File Name %s",threadaction[file_location]);
-						//strcpy(requesttoserver.DFCRequestCommand,"GET");
-						sendcommandToDFS(requesttoserver);
-
-							//if(rcvFile(action[file_location]) <0){	
-							//	printf("Error in get!!!\n");
-								
-							//} v
+				    
+					//copy socket 
+					requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
 					
-		  	}
-		  	else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
-						
-						DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);
-						//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
+					//compare the input command and perform necessary action inside thread  		
+					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
 						//send command
-						//DEBUG_PRINT("File Name %s",threadaction[file_location]);
-						//strcpy(requesttoserver.DFCRequestCommand,"GET");
+						DEBUG_PRINT("Inside Thread %d LIST",(int)DFSId);
+						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
+						strcpy(requesttoserver.DFCRequestCommand,"LIST");
 						sendcommandToDFS(requesttoserver);
-
-							//if(rcvFile(action[file_location]) <0){	
-							//	printf("Error in get!!!\n");
+						//sendtoServer(command,strlen(command),NOACK);//send command to server
+						//sendCommand();				
+						//listRcv();								
+						DEBUG_PRINT("Waiting for List");
+						bzero(list[list_count],sizeof(list[list_count]));
+						//#ifdef NON_BLOCKING
+						if(nbytes = recv(sock[DFSId],list[list_count],sizeof(list[list_count]),0)<0){//recv from server and check for non-blocking 
+							fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
+						}
+						
+						//#else
+							//nbytes = recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr*)&remote,&addr_length);
+						//#endif	
+						DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
+						list_count++;
+					}
+					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 								
-							//} v
-					
-		  	}
-	
+
+								DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);
+								strcpy(requesttoserver.DFCRequestCommand,"GET");
+								strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+								//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
+								//send command
+								//DEBUG_PRINT("File Name %s",threadaction[file_location]);
+								//strcpy(requesttoserver.DFCRequestCommand,"GET");
+								sendcommandToDFS(requesttoserver);
+
+									//if(rcvFile(action[file_location]) <0){	
+									//	printf("Error in get!!!\n");
+										
+									//} v
+							
+				  	}
+				  	else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+								
+								DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);
+								strcpy(requesttoserver.DFCRequestCommand,"PUT");
+								strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+								//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
+								//send command
+								//DEBUG_PRINT("File Name %s",threadaction[file_location]);
+								//strcpy(requesttoserver.DFCRequestCommand,"GET");
+								sendcommandToDFS(requesttoserver);
+
+									//if(rcvFile(action[file_location]) <0){	
+									//	printf("Error in get!!!\n");
+										
+										//} 
+						
+							
+					}
+		pthread_mutex_unlock(&thread_mutex);	
+		DEBUG_PRINT("UnLOcked Mutex");						
 		//Close multiple Socket 
 		shutdown (sock[DFSId], SHUT_RDWR);         //All further send and recieve operations are DISABLED...
     	close(sock[DFSId]);
@@ -875,22 +914,9 @@ void *DFSThreadServed(void *Id){
     
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-			
+		
 int main (int argc, char * argv[] ){
-    int i=0,c=0;
+    int i=0,c=0,l=0;
     char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
 	
@@ -953,11 +979,13 @@ int main (int argc, char * argv[] ){
 	strcpy(requesttoserver.DFCRequestPass,config.DFCPassword);
 	strcpy(datatoserver.DFCRequestPass,config.DFCPassword);
 
-	DEBUG_PRINT("User => Password ", requesttoserver.DFCRequestUser,requesttoserver.DFCRequestPass);
+	DEBUG_PRINT("User => Password %s=>%s", requesttoserver.DFCRequestUser,requesttoserver.DFCRequestPass);
 	
 	//Test  of file functions 
 	//splitFile("sample.txt",4);
-    //mergeFile("sample.txt",4);
+	//mergeFile("sample.txt",4);
+	//Initiate Mutex 
+  	pthread_mutex_init(&thread_mutex,NULL);
 
 
 	DEBUG_PRINT("Completed splitting File name");     
@@ -993,48 +1021,7 @@ int main (int argc, char * argv[] ){
 				total_attr_commands=0;
 				if((total_attr_commands=splitString(command," ",action,3)>0))
 				{
-	   				DEBUG_PRINT("Command %s => length %d",action[command_location]);
-	   				DEBUG_PRINT("File %s",action[file_location]);
-	   				DEBUG_PRINT("Total Commands %d",total_attr_commands);
-					
-					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
-						//send command
-						DEBUG_PRINT("Inside LIST");
-						strcpy(requesttoserver.DFCRequestCommand,"LIST");
-						//sendcommandToDFS(requesttoserver);
-						//sendtoServer(command,strlen(command),NOACK);//send command to server
-						//sendCommand();				
-						//listRcv();								
-					}
-					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
-							DEBUG_PRINT("Inside GET");
-							DEBUG_PRINT("File Name %s",action[file_location]);
-							strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							strcpy(requesttoserver.DFCRequestCommand,"GET");
-							//sendcommandToDFS(requesttoserver);
-
-								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
-									
-								//} v
-						
-			  		}
-
-					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
-							DEBUG_PRINT("Inside PUT");
-							DEBUG_PRINT("File Name %s",action[file_location]);
-							strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							strcpy(requesttoserver.DFCRequestCommand,"PUT");
-							//sendcommandToDFS(requesttoserver);
-
-								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
-									
-								//} v
-						
-			  		}
+	   				DEBUG_PRINT("Total Commands >0  => %d",total_attr_commands);
 			  	}	
 				else
 				{
@@ -1047,8 +1034,14 @@ int main (int argc, char * argv[] ){
 				perror("Allocation for command ");
 			}
 
+			//clear all buffers before sending the command 
+			DEBUG_PRINT("Clearing buffers");
+			bzero(list,strlen(list));//clear the list before evoking the threads 
+			list_count=0;
+			DEBUG_PRINT("List Buffer(should be empty or garbage) => %s",list);
 
 
+			//*** change logic , should not create the threads if command invalid *****
 			//Create the thread for all the communication with DFS Servers
 			for (c=0;c<MAXDFSCOUNT;c++ ){
 				if ((pthread_create(&DFSThread[c],NULL,DFSThreadServed,(void *)c))<0){
@@ -1069,8 +1062,77 @@ int main (int argc, char * argv[] ){
 				 {
 				   perror(" Thread Join");
 				 }
-			}	
+			}
 			DEBUG_PRINT("Thread join Completed \n");
+
+			//IN main depending on Command 
+
+					DEBUG_PRINT("Command %s => length %d",action[command_location]);
+	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
+	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
+					
+					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
+						//send command
+						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
+						//sendcommandToDFS(requesttoserver);
+						//sendtoServer(command,strlen(command),NOACK);//send command to server
+						//sendCommand();				
+						//listRcv();	
+						DEBUG_PRINT("Complete List RCVD");						
+						for (l=0;l<list_count;l++){	
+							DEBUG_PRINT(" %s",list[l]);
+						}
+					}
+					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+							DEBUG_PRINT("Inside GET");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							//strcpy(requesttoserver.DFCRequestCommand,"GET");
+							//sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+
+					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+							DEBUG_PRINT("Inside PUT");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+							//send command
+							//strcpy(requesttoserver.DFCRequestCommand,"PUT");
+							//sendcommandToDFS(requesttoserver);
+
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} v
+						
+			  		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 			DEBUG_PRINT("Deallocate memory for command");
 			//Free the command allocated 
