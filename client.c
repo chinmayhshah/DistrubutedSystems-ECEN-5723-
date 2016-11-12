@@ -801,6 +801,7 @@ char (*action)[MAXCOLSIZE];
 char list[MAXPACKSIZE][MAXCOLSIZE];// To store list common between all threads
 int list_count=0;
 int resource_mutex=1;
+char comp_msg[MAXCOLSIZE]="COMP";//For detecting completion of message
 //Call back function for thread 
 //Input is the thread id(i) - maps to the DFSIP and DFSPORT 
 void *DFSThreadServed(void *Id){
@@ -857,17 +858,24 @@ void *DFSThreadServed(void *Id){
 						//sendCommand();				
 						//listRcv();								
 						DEBUG_PRINT("Waiting for List");
-						bzero(list[list_count],sizeof(list[list_count]));
-						//#ifdef NON_BLOCKING
-						if(nbytes = recv(sock[DFSId],list[list_count],sizeof(list[list_count]),0)<0){//recv from server and check for non-blocking 
-							fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
-						}
 						
+						//#ifdef NON_BLOCKING
+
+						//do
+						//{
+							//bzero(list[list_count],sizeof(list[list_count]));
+							DEBUG_PRINT("Inside list capture");
+							if(nbytes = recv(sock[DFSId],list[list_count],sizeof(list[list_count]),0)<0){//recv from server and check for non-blocking 
+								fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
+							}
+							DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
+							list_count++;
+						//}while((strncmp(list[list_count],comp_msg,strlen(comp_msg)!=0))&&(list[list_count]) );
 						//#else
 							//nbytes = recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr*)&remote,&addr_length);
 						//#endif	
-						DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
-						list_count++;
+						
+						
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 								

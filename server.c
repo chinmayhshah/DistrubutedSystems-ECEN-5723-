@@ -477,7 +477,7 @@ void exitServer(){
 	close(sock);
 }
 
-
+char comp_msg[MAXCOLSIZE]="COMP";
 /*************************************************************
 List the files on local directory of user and send all file parts 
 details to server 
@@ -512,6 +512,7 @@ int list(char * directory,int listsock){
 	bzero(listtosend,strlen(listtosend));
 	DEBUG_PRINT("Check LIST(should be blank) send => %s",listtosend);
 	while(1){
+		bzero(listtosend,strlen(listtosend));
 		struct  dirent *listfiles;
 		//ref: http://nxmnpg.lemoda.net/3/readdir
 		listfiles= readdir(d);
@@ -522,8 +523,15 @@ int list(char * directory,int listsock){
 		if(!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0)){//excluding present and previous dir
 			DEBUG_PRINT("File %s",listfiles->d_name);
 			strcat(listtosend,listfiles->d_name);
-			strcat(listtosend,"\t");
+			//strcat(listtosend,"\t");
 			DEBUG_PRINT("LIST concat %s",listtosend);
+			DEBUG_PRINT(" directory=> %s send => %s,",directory,listtosend);
+			//Send the files to client 
+			//Rectify the 
+			if((send(listsock,listtosend,strlen(listtosend),0))<0)		
+			{
+				fprintf(stderr,"Error in sending to client in list send %s\n",strerror(errno));
+			}
 		}
 	}
 	//close the directory 
@@ -532,15 +540,14 @@ int list(char * directory,int listsock){
 		//sendtoClient(strerror(errno),(ssize_t)sizeof(strerror(errno)),NOACK);
 		return -1;
 	}
+	DEBUG_PRINT("Send Completion Message => %s",comp_msg);
 	
+	if((send(listsock,comp_msg,strlen(comp_msg),0))<0)		
+			{
+				fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+			}
 	DEBUG_PRINT(" socket => %d ",listsock);
-	DEBUG_PRINT(" directory=> %s send => %s,",directory,listtosend);
-	//Send the files to client 
-	//Rectify the 
-	if((send(listsock,listtosend,strlen(listtosend),0))<0)		
-	{
-		fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
-	}
+	
 	
 	//sendtoClient(listtosend,(ssize_t)sizeof(listtosend));
 	free(listtosend);
