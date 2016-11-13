@@ -75,6 +75,7 @@ pthread_mutex_t thread_mutex;
 #define SERV_PORT 3000
 
 #define MAXCOLSIZE 100
+#define MAXFILESCOUNT 1000
 #define HTTPREQ 	30
 
 #define MAXDFSCOUNT 4
@@ -798,7 +799,7 @@ struct sockaddr_in server[MAXDFSCOUNT];
 int total_attr_commands;
 //type2D *action;//for splitting commands 
 char (*action)[MAXCOLSIZE];
-char list[MAXPACKSIZE][MAXCOLSIZE];// To store list common between all threads
+char list[MAXFILESCOUNT][MAXCOLSIZE];// To store list common between all threads
 int list_count=0;
 int resource_mutex=1;
 //Call back function for thread 
@@ -912,6 +913,260 @@ void *DFSThreadServed(void *Id){
     	close(sock[DFSId]);
     	sock[DFSId]=-1;
     
+}
+
+// A list recv function for main 
+// after all threads have received the 
+void listMainRcv()
+{
+	char list_temp[MAXFILESCOUNT][MAXCOLSIZE];
+	int i=0,j=0,k=0,l=0,a=0,f=0,total_files_rxcv,temp_locn,total_disp_files=0; 
+	char file_ext[MAXCOLSIZE];
+	char filename[MAXFILESCOUNT][MAXCOLSIZE];
+	char partfilename[MAXFILESCOUNT][MAXCOLSIZE];
+	char display_list[MAXFILESCOUNT][MAXCOLSIZE];
+	char *lastptr=NULL;
+	char *filename_temp=NULL;
+	DEBUG_PRINT("Complete List RCVD");						
+	int duplicate_flag=0,final_list=0, partflags[MAXFILESCOUNT][MAXDFSCOUNT];
+
+
+	//clear the arrays 
+	//bzero(display_list,strlen(display_list));
+	for (i=0;i<MAXFILESCOUNT;i++){	
+		bzero(partflags[i],strlen(partflags[i]));
+		bzero(partfilename[i],strlen(partfilename[i]));
+		bzero(display_list[i],strlen(display_list[i]));
+		bzero(filename[i],strlen(filename[i]));
+		//bzero(list_temp[i],strlen(list_temp[i]));
+	}
+
+	for (i=0;i<MAXDFSCOUNT;i++){	
+		DEBUG_PRINT(" %s",list[i]);
+	}
+
+	//for presentation purposes five files 
+	i=0;
+	j=0;
+	l=0;
+	k=0;
+	DEBUG_PRINT("Split files from differet serveres");				
+		
+	while(i < MAXDFSCOUNT){						
+		if (list[i][j] == ' '){			
+			list_temp[k][j]='\0';					
+			if (list[i][j+1] == '#'){
+				i++;			
+				j=0;	
+				
+			}
+			else{				
+				j++;
+			}	
+			l=0;
+			k++;	
+		}
+		else
+		{					
+			list_temp[k][l]=list[i][j];			
+			j++;
+			l++;
+		}		
+		
+	}	
+	
+	total_files_rxcv =k;
+	DEBUG_PRINT("total files separated %d",total_files_rxcv);	
+
+	//Display all files rcved
+	j=i=k=0;
+	DEBUG_PRINT("Display list %d",total_files_rxcv);	
+	for (k=0;k<total_files_rxcv;k++){
+		DEBUG_PRINT("%s",list_temp[k]);	
+	}
+
+
+	//check unique and merge file names 
+	j=i=k=f=0;
+
+	DEBUG_PRINT("temp var values %d  %d %d",i,j,k);	
+	while(j<total_files_rxcv)
+	{
+				if ((filename_temp=(char*)malloc(sizeof(char)*MAXCOLSIZE))<0)
+				{
+					printf("Cant Allocate space\n");
+					break;
+				}
+
+				strncpy(filename_temp,list_temp[j],strlen(list_temp[j]));
+				filename_temp[strlen(list_temp[j])]='\0';
+				DEBUG_PRINT	("File temp %s \n",filename_temp);
+				
+
+				// to extract name of file and check if matches with other files and 
+				lastptr = strrchr(filename_temp,'.');
+				
+				if(lastptr){
+					*lastptr++;
+					strcpy(file_ext,lastptr);
+					DEBUG_PRINT("Extension %s",file_ext);
+					temp_locn=strlen(filename_temp)- strlen(file_ext) -1;
+					
+					strncpy( filename[f], filename_temp,temp_locn);
+					filename[f][temp_locn+1] = '\0';
+					//check for duplicaates of same file and keep only unique file names 
+						for (a=0;a<total_files_rxcv;a++){
+							if (!strcmp(filename[f],filename[a]) && a<f ){// check if filename matches with previous file namme
+								duplicate_flag=1;
+								DEBUG_PRINT("break up");
+								break;
+							}					
+						}
+						if (duplicate_flag){						
+							duplicate_flag=0;
+							DEBUG_PRINT("Found duplicate file name ");
+						}
+						else
+						{
+
+							f++;// update if not duplicate 
+							DEBUG_PRINT("update f");
+
+						}
+					
+					//update the part flag which has been rcvd	
+					//temp_locn=atoi(file_ext);
+					//temp_locn-=48;
+					//partflags[f-1][temp_locn]=1;
+					//DEBUG_PRINT("part flag updated %d=> %d => %x , f=>%d",temp_locn,partflags[f-1][temp_locn],temp_locn,f-1);
+						
+					DEBUG_PRINT("Extracted file %d=>%s",f-1,filename[f-1]);
+					
+				}
+				else
+				{
+					
+					perror("File not Found");
+					DEBUG_PRINT("Could not find '.' ");
+					//return -1;
+				}
+		j++;		
+	}
+
+	total_disp_files=f;
+
+	//Debugging
+	DEBUG_PRINT("All List of files");
+	for (f=0;f<total_disp_files;f++){	
+			 DEBUG_PRINT("%s",filename[f]);
+	}
+
+	//check if each part of file present or not 
+	j=i=k=f=0;
+	DEBUG_PRINT("Upating Part flags");
+	while(j<total_files_rxcv){
+				strncpy(filename_temp,list_temp[j],strlen(list_temp[j]));
+				filename_temp[strlen(list_temp[j])]='\0';
+				DEBUG_PRINT	("File temp %s \n",filename_temp);
+				
+
+				// to extract name of file and check if matches with other files and 
+				lastptr = strrchr(filename_temp,'.');
+				
+				if(lastptr){
+					*lastptr++;
+					strcpy(file_ext,lastptr);
+					DEBUG_PRINT("Extension %s",file_ext);
+					temp_locn=strlen(filename_temp)- strlen(file_ext) -1;
+					
+					strncpy( partfilename[f], filename_temp,temp_locn);
+					partfilename[f][temp_locn+1] = '\0';
+					//check for duplicaates of same file and keep only unique file names 
+					//	for (a=0;a<total_files_rxcv;a++){
+					//		if (!strcmp(filename[f],filename[a]) && a<f ){// check if filename matches with previous file namme
+					//			duplicate_flag=1;
+					//			DEBUG_PRINT("break up");
+					//			break;
+					//			}					
+					//	}
+					//	if (duplicate_flag){						
+					//		duplicate_flag=0;
+					//		DEBUG_PRINT("Found duplicate file name ");
+					//	}
+					//	else
+					//	{
+					//
+					//		f++;// update if not duplicate 
+
+					//	}
+					
+
+					//update the part flag which has been rcvd	
+					temp_locn=atoi(file_ext);
+					//temp_locn-=48;
+					//check which file name matches 
+					for(k=0;k<total_disp_files;k++){
+						DEBUG_PRINT("File =>%s , Orginal File=> %s ",partfilename[f],filename[k]);
+						if (!(strncmp(partfilename[f],filename[k],strlen(partfilename[f])))){
+							partflags[k][temp_locn]=1;
+							DEBUG_PRINT("File %s part flag updated %d=> %d => %x , f=>%d",partfilename[f],temp_locn,partflags[k][temp_locn],temp_locn,k);
+							break;
+
+						}else
+						{
+							DEBUG_PRINT("Didnt match");
+						}
+					}
+					
+				}
+				else
+				{
+					
+					perror("File not Found");
+					DEBUG_PRINT("Could not find '.' ");
+					//return -1;
+				}
+		j++;		
+	}
+
+
+	//total_files_rxcv=k;
+
+	
+
+
+	j=0;
+	printf("\nList of files\n");
+
+	// List of files to be displayed 
+	for (f=0;f<total_disp_files;f++){
+			DEBUG_PRINT("Filename => %s",filename[j] );
+			DEBUG_PRINT("Var f=>%d j=>%d file=>%s",f,j,filename[f]);
+			 // check if all flag bits 
+				for (i=1;i<=MAXDFSCOUNT;i++){
+					DEBUG_PRINT("Part %d => %d ",i,partflags[f][i]);
+					if (partflags[f][i]==0){
+						DEBUG_PRINT("File Name %s => Part %d Not found ",filename[f],i);
+						final_list=1;
+						break;
+					}
+
+				}
+				bzero(display_list[j],strlen(display_list[j]));
+				strncpy(display_list[j],filename[f],strlen(filename[f]));
+				
+				if (final_list){
+					final_list =0;
+					strcat(display_list[j]," [incomplete]");
+					DEBUG_PRINT("incomplete");
+				}
+				//DEBUG_PRINT("%s",display_list[j]);
+				printf("\n%s\n",display_list[j] );
+				j++;
+	}
+
+	free(filename_temp);
+
 }
 
 		
@@ -1077,11 +1332,8 @@ int main (int argc, char * argv[] ){
 						//sendcommandToDFS(requesttoserver);
 						//sendtoServer(command,strlen(command),NOACK);//send command to server
 						//sendCommand();				
-						//listRcv();	
-						DEBUG_PRINT("Complete List RCVD");						
-						for (l=0;l<list_count;l++){	
-							DEBUG_PRINT(" %s",list[l]);
-						}
+						listMainRcv();	
+						
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");

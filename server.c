@@ -522,8 +522,8 @@ int list(char * directory,int listsock){
 		if(!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0)){//excluding present and previous dir
 			DEBUG_PRINT("File %s",listfiles->d_name);
 			strcat(listtosend,listfiles->d_name);
-			strcat(listtosend,"\t");
-			DEBUG_PRINT("LIST concat %s",listtosend);
+			strcat(listtosend," ");
+			
 		}
 	}
 	//close the directory 
@@ -537,6 +537,8 @@ int list(char * directory,int listsock){
 	DEBUG_PRINT(" directory=> %s send => %s,",directory,listtosend);
 	//Send the files to client 
 	//Rectify the 
+	strcat(listtosend,"#");// end of packet 
+	DEBUG_PRINT("LIST send %s",listtosend);
 	if((send(listsock,listtosend,strlen(listtosend),0))<0)		
 	{
 		fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
