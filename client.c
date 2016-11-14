@@ -807,6 +807,7 @@ int resource_mutex=1;
 void *DFSThreadServed(void *Id){
 
 			int DFSId = (int)Id;
+			int connect_sucess=0;
 			
 
 			
@@ -836,14 +837,20 @@ void *DFSThreadServed(void *Id){
 				    //Connect to remote server
 				    if (connect(sock[DFSId] , (struct sockaddr *)&server[DFSId] , sizeof(server[DFSId])) < 0)
 				    {
-				        perror("Connect failed. Error");
+				        perror("\nConnect failed. Error");
 				        //exit(-1);
-				        return -1;// Return as Socket is not up 
+				        connect_sucess=0;
+				        //return -1;// Return as Socket is not up 
 				    }
-			 		DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
+				    else
+				    {
+				    	connect_sucess=1;
+				    }
+			 		
 				    //i=0;
 
-				    
+			if (connect_sucess){	    
+					DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
 					//copy socket 
 					requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
 					
@@ -906,12 +913,19 @@ void *DFSThreadServed(void *Id){
 						
 							
 					}
+				DEBUG_PRINT("UnLOcked Mutex");						
+				//Close multiple Socket 
+				shutdown (sock[DFSId], SHUT_RDWR);         //All further send and recieve operations are DISABLED...
+		    	close(sock[DFSId]);
+		    	sock[DFSId]=-1;	
+			}		
+			else
+			{
+
+				DEBUG_PRINT("No connection");
+			}
 		pthread_mutex_unlock(&thread_mutex);	
-		DEBUG_PRINT("UnLOcked Mutex");						
-		//Close multiple Socket 
-		shutdown (sock[DFSId], SHUT_RDWR);         //All further send and recieve operations are DISABLED...
-    	close(sock[DFSId]);
-    	sock[DFSId]=-1;
+		
     
 }
 
