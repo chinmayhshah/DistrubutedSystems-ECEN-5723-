@@ -37,37 +37,6 @@ File for implementation of a Distrubuted File Client
 #define RELIABILITY
 #define ERRMESSAGE 20
 
-//#define NON_BLOCKING
-
-int nbytes;                             // number of bytes send by sendto()
-//int sock;                               //this will be our socket
-char buffer[MAXBUFSIZE];
-
-struct sockaddr_in remote;              //"Internet socket address structure"
-struct sockaddr *remoteaddr;
-//struct hostent *server;
-struct sockaddr_in from_addr;
-int addr_length = sizeof(struct sockaddr);
-char ack_message[ACKMESSAGE];
-
-
-typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
-
-
-//Time set for Time out 
-struct timeval timeout={0,0};     
-
-
-
-
-//Using Mutex
-//sem_t semDFS[MAXDFSCOUNT];
-pthread_mutex_t thread_mutex;
-
-
-
-
-
 
 
 /* You will have to modify the program below */
@@ -100,6 +69,63 @@ pthread_mutex_t thread_mutex;
 #define DEBUG_PRINT(fmt, args...) \
         do { if (DEBUG) fprintf(stderr, "\n %s:%d:%s(): " fmt, __FILE__, \
                                 __LINE__, __FUNCTION__, ##args); } while (0)
+
+
+
+//#define NON_BLOCKING
+
+int nbytes;                             // number of bytes send by sendto()
+//int sock;                               //this will be our socket
+char buffer[MAXBUFSIZE];
+
+struct sockaddr_in remote;              //"Internet socket address structure"
+struct sockaddr *remoteaddr;
+//struct hostent *server;
+struct sockaddr_in from_addr;
+int addr_length = sizeof(struct sockaddr);
+char ack_message[ACKMESSAGE];
+
+
+typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
+
+
+//Time set for Time out 
+struct timeval timeout={0,0};     
+
+
+
+
+//Using Mutex
+//sem_t semDFS[MAXDFSCOUNT];
+pthread_mutex_t thread_mutex;
+
+
+
+//Input from user in a while loop 
+char command[MAXCOMMANDSIZE];//Local command storage 
+struct DataFmt datatoserver;
+struct requestCommandFmt requesttoserver;
+
+//For Socket
+int sock[MAXDFSCOUNT];//No(Sockets) =DFS Server availables
+struct sockaddr_in server[MAXDFSCOUNT];
+int total_attr_commands;
+//type2D *action;//for splitting commands 
+char (*action)[MAXCOLSIZE];
+char list[MAXFILESCOUNT][MAXCOLSIZE];// To store list common between all threads
+int list_count=0;
+int resource_mutex=1;
+// Default split of parts 	 //array     0 1 2 3
+								        //DFS1 2 3 4	
+//int partdest1[MAXDFSCOUNT][MAXDFSCOUNT]={1,2,3,4};
+//int partdest2[MAXDFSCOUNT][MAXDFSCOUNT]={2,3,4,1};
+
+int partdest1[MAXDFSCOUNT]={1,2,3,4};
+int partdest2[MAXDFSCOUNT]={2,3,4,1};
+//Call back function for thread 
+//Input is the thread id(i) - maps to the DFSIP and DFSPORT 
+
+
 
 
 
@@ -171,7 +197,9 @@ struct requestCommandFmt{
 		char DFCRequestPass[MAXCOLSIZE];
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
+		char DFCMergedFile[MAXCOLSIZE];
 		int socket;
+		int DFServerId;
 };
 
 //Data exchnage format b/w DFS and DFC
@@ -181,8 +209,10 @@ struct DataFmt{
 		char DFCRequestPass[MAXCOLSIZE];
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
+		char DFCMergedFile[MAXCOLSIZE];
 		char DFCData[MAXPACKSIZE];
 		int socket;
+		int DFServerId;
 };
 
 
@@ -545,7 +575,7 @@ int 	splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int m
 		memset(splitop[sizeofip],0,sizeof(splitop[sizeofip]));
 		strncpy(splitop[sizeofip],p,strlen(p));
 		strcat(splitop[sizeofip],"\0");
-		DEBUG_PRINT	("%d : %s",sizeofip,splitop[sizeofip]);
+		DEBUG_PRINT	("%d : %s=>",sizeofip,splitop[sizeofip]);
 		sizeofip++;
 		//get next token 
 		p=strtok(NULL,delimiter);		
@@ -590,21 +620,33 @@ int MD5Cal(char *filename, char *MD5_result)
 	bzero(tempdata,sizeof(tempdata));
 	unsigned char temp;
 	int i=0;
+	
+	char cwd[1024];
+	//chdir("/path/to/change/directory/to");
+	getcwd(cwd, sizeof(cwd));
+	DEBUG_PRINT("Current working dir: %s\n", cwd);
 
-	FILE *fd = fopen(filename,"rb");
-	if (fd ==NULL)
+
+	//DEBUG_PRINT("File To be opened %s",cwd);
+	//sprintf(filename,"%s%s",cwd,filename);
+	//strcat(cwd,"/");
+	//strcat(cwd,filename);
+	DEBUG_PRINT("File=>%s=>",filename);
+	FILE *fdesc = fopen(filename,"rb");
+	if (fdesc ==NULL)
 	{
-		perror(filename);//if can't open
+		perror(cwd);//if can't open
+		DEBUG_PRINT("File Not Found %s",filename);
 		return -1;
 	}
 
 	MD5_Init(&mdCont);//Initialize 
 	
-	while((file_bytes = fread(tempdata,1,10,fd)) != 0){//Read data from files
+	while((file_bytes = fread(tempdata,1,10,fdesc)) != 0){//Read data from files
 		MD5_Update(&mdCont,tempdata,file_bytes);//Convert and update context 		
 	}	
 	MD5_Final(MD5_gen,&mdCont);
-	fclose(fd);	
+	fclose(fdesc);	
 
 	for ( i=0;i<MD5_DIGEST_LENGTH;i++) {
 		temp = MD5_gen[i];
@@ -614,6 +656,7 @@ int MD5Cal(char *filename, char *MD5_result)
 		*MD5_result++;
 		
 	   }
+	DEBUG_PRINT("MD5 Gen => MD5 Result %s",MD5_gen,MD5_result);  
 	return 0;
 }
 
@@ -636,7 +679,7 @@ int splitFile(char *sourcefilename,int parts)
  	int ch=0;
     long int size=0, k=0;
     int i=0;
-    FILE *sourceFile,*splitFile; //file and temp file
+    FILE *sourceFile=NULL,*splitFile=NULL; //file and temp file
 
     //printf("enter the file you want to split with full path : ");
     //scanf("%s", fn);
@@ -662,8 +705,9 @@ int splitFile(char *sourcefilename,int parts)
     DEBUG_PRINT("Split Size(File) => %ld\n", k);
     
     rewind(sourceFile);// Change the pointer back to original
+    bzero(destFileName,strlen(destFileName));
     sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
-    DEBUG_PRINT("Split File name %s",destFileName);
+    printf("Split File name %s=>",destFileName);
     splitFile = fopen(destFileName, "wb");//Open the destincation file
     if (splitFile==NULL)// if file closed or not
     {
@@ -671,14 +715,14 @@ int splitFile(char *sourcefilename,int parts)
         perror("Destination File Open");
         exit(-1);
     }
-    DEBUG_PRINT("Here ");
+    
     while(i<=(parts))
     {
         ch = fgetc(sourceFile);    
         //if (ch==EOF)//check for end of file 
         //    break;
-        //DEBUG_PRINT("Read Value => %s\n", ch);        
-        DEBUG_PRINT("Here 2");
+    
+    
         fputc(ch, splitFile);
         if(feof(splitFile) )
 	    {
@@ -690,9 +734,16 @@ int splitFile(char *sourcefilename,int parts)
         {
         	DEBUG_PRINT("Data of  file reached %d",(i*k));
 		    i = i+1;
-		    DEBUG_PRINT("Closing %s:%d",destFileName,splitFile);
-			fclose(splitFile);
+		    DEBUG_PRINT("Closing %s",destFileName);
+		    if(splitFile!=NULL){
+		    	
+				fclose(splitFile);
+				DEBUG_PRINT("Closed %s",destFileName);
+			}
+
+
 			if (i<=(parts)){
+				DEBUG_PRINT("INto new file openeing");
 	            sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
 	            splitFile=fopen(destFileName, "wb");
 	        }
@@ -701,7 +752,7 @@ int splitFile(char *sourcefilename,int parts)
     if(sourceFile){
     	fclose(sourceFile);
     }	
-   
+   printf("after completed split %s File%s\n",action[command_location],action[file_location]); 										
 }
 
 
@@ -786,31 +837,46 @@ int mergeFile(char *mergedFileName,int parts)
     	fclose(mergeFile);
     }	
    
+
 }
 
-//Input from user in a while loop 
-char command[MAXCOMMANDSIZE];//Local command storage 
-struct DataFmt datatoserver;
-struct requestCommandFmt requesttoserver;
 
-//For Socket
-int sock[MAXDFSCOUNT];//No(Sockets) =DFS Server availables
-struct sockaddr_in server[MAXDFSCOUNT];
-int total_attr_commands;
-//type2D *action;//for splitting commands 
-char (*action)[MAXCOLSIZE];
-char list[MAXFILESCOUNT][MAXCOLSIZE];// To store list common between all threads
-int list_count=0;
-int resource_mutex=1;
-//Call back function for thread 
-//Input is the thread id(i) - maps to the DFSIP and DFSPORT 
+
+
+void putDFSFile();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 void *DFSThreadServed(void *Id){
 
-			int DFSId = (int)Id;
-			int connect_sucess=0;
-			
 
+
+			int DFSId = (int)Id;
+			int connect_sucess=0,i=0,k=0,temp=0;
 			
+			//MD5 Cal
+			char * MD5file;
+			char MD5_temp[MD5_DIGEST_LENGTH*2];
+			
+			
+			MD5file = MD5_temp;
+			
+	
+			printf("Command %s File%s\n",action[command_location],action[file_location]);	
 			DEBUG_PRINT("DFS Id connection %d\n",(int)DFSId);
 			//Create multiple Socket and connect them (TCP)
 			//for (i=0;i<MAXDFSCOUNT;i++){
@@ -823,7 +889,7 @@ void *DFSThreadServed(void *Id){
 	    		return -1;
 	    	}
 		    //}
-		    DEBUG_PRINT("created SOCKet %d ",sock[DFSId]);
+		    DEBUG_PRINT("created SOCKet %d \n",sock[DFSId]);
 			
 		    //Connect the multiple sockets 
 		    server[DFSId].sin_addr.s_addr = inet_addr(config.DFSIP[DFSId]);
@@ -850,12 +916,13 @@ void *DFSThreadServed(void *Id){
 				    //i=0;
 
 			if (connect_sucess){	    
-					DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
+					printf("connected SOCKet %d",sock[DFSId]);
 					//copy socket 
 					requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
-					
+					requesttoserver.DFServerId=datatoserver.DFServerId=DFSId;
+					printf("Command %s File%s\n",action[command_location],action[file_location]);
 					//compare the input command and perform necessary action inside thread  		
-					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
+					if ((strncmp(requesttoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)){
 						//send command
 						DEBUG_PRINT("Inside Thread %d LIST",(int)DFSId);
 						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
@@ -877,12 +944,11 @@ void *DFSThreadServed(void *Id){
 						DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
 						list_count++;
 					}
-					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+					else if ((strncmp(requesttoserver.DFCRequestCommand,"GET",strlen("GET")))==0){
 								
 
 								DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);
-								strcpy(requesttoserver.DFCRequestCommand,"GET");
-								strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+								
 								//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
 								//send command
 								//DEBUG_PRINT("File Name %s",threadaction[file_location]);
@@ -895,22 +961,29 @@ void *DFSThreadServed(void *Id){
 									//} v
 							
 				  	}
-				  	else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+				  	else if ((strncmp(requesttoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
 								
-								DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);
-								strcpy(requesttoserver.DFCRequestCommand,"PUT");
-								strcpy(requesttoserver.DFCRequestFile,action[file_location]);
+								printf("Inside Thread %d PUT",(int)DFSId);
+								
+
 								//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
 								//send command
 								//DEBUG_PRINT("File Name %s",threadaction[file_location]);
 								//strcpy(requesttoserver.DFCRequestCommand,"GET");
-								sendcommandToDFS(requesttoserver);
+								//sendcommandToDFS(requesttoserver);//send the command 
+								//if (MD5file= (char*)malloc(sizeof(MD5_DIGEST_LENGTH*2))){
+								
+								putDFSFile();
 
-									//if(rcvFile(action[file_location]) <0){	
-									//	printf("Error in get!!!\n");
-										
-										//} 
-						
+								//if(MD5file)
+								//{
+								//	free(MD5file);
+								//}	
+								//if(rcvFile(action[file_location]) <0){	
+								//	printf("Error in get!!!\n");
+									
+								//} 
+					
 							
 					}
 				DEBUG_PRINT("UnLOcked Mutex");						
@@ -924,10 +997,138 @@ void *DFSThreadServed(void *Id){
 
 				DEBUG_PRINT("No connection");
 			}
+			// Free MD5file if present 
+	
 		pthread_mutex_unlock(&thread_mutex);	
 		
     
 }
+
+
+// Put files to location accodrding to MD5 has value 
+
+
+
+void putDFSFile(){
+
+	
+	//long int MD5value=0,
+	//char * MD5value;
+	int k=0,i=0,tempdest;
+	char tempFile1[MAXCOLSIZE];//temp file name for creating the split files 
+	char tempFile2[MAXCOLSIZE];//temp file name for creating the split files 
+	char tempFile3[MAXCOLSIZE];//temp file name for creating the split files 
+	int fd1=0,fd2=0;
+	char data[MAXPACKSIZE];
+	int temp;
+	ssize_t  file_bytes;
+
+		
+	DEBUG_PRINT("Put DFS File");
+
+// Send Files for each server according to each client 
+		strcpy(tempFile3,datatoserver.DFCMergedFile); 
+
+		bzero(tempFile1,strlen(tempFile1));
+		sprintf(tempFile1,"%s.%d",tempFile3,partdest1[datatoserver.DFServerId]);
+		DEBUG_PRINT("Temp File 1 %s",tempFile1);
+		strcpy(datatoserver.DFCRequestFile,tempFile1); 
+
+		
+
+
+			//open the file for this DFS dest 1
+			if((fd1= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
+				perror(datatoserver.DFCRequestFile);//if can't open
+				//send to client the error
+				DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
+				//return -1;
+			}
+			else // open file successful ,read file 
+			{
+				//read bytes and send 
+				bzero(data,sizeof(data));
+				if(file_bytes = read(fd1,data,MAXPACKSIZE) > 0){//read data from file 	
+					//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
+					strcpy(datatoserver.DFCData,data);
+					DEBUG_PRINT("Read data from%s=>%s ",datatoserver.DFCRequestFile,data);	
+				}	
+			}	
+			sendDataToDFS(datatoserver);//send data to 
+
+
+
+
+			//destication 2 
+			DEBUG_PRINT("Temp File 2 here %s=>%s",datatoserver.DFCRequestFile,tempFile2);
+			bzero(tempFile2,strlen(tempFile2));
+			sprintf(tempFile2,"%s.%d",tempFile3,partdest2[datatoserver.DFServerId]);
+			DEBUG_PRINT("Temp File 2 %s",tempFile2);
+			strcpy(datatoserver.DFCRequestFile,tempFile2);
+
+
+			//open the file for this DFS dest 1
+			if((fd2= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
+				perror(datatoserver.DFCRequestFile);//if can't open
+				//send to client the error
+				DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
+				//return -1;
+			}
+			else // open file successful ,read file 
+			{
+				//read bytes and send 
+				bzero(data,sizeof(data));
+				if(file_bytes = read(fd2,data,MAXPACKSIZE) > 0){//read data from file 	
+					//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
+					strcpy(datatoserver.DFCData,data);
+					DEBUG_PRINT("Read data from%s=> ",datatoserver.DFCRequestFile,data);	
+				}	
+			}	
+			sendDataToDFS(datatoserver);//send data to 
+			DEBUG_PRINT("Trying to close files");
+			
+			if(fd1){
+				if(close(fd1)<0){
+					perror("fd1");
+				}
+			}
+			if(fd2){
+				if(close(fd2)<0){
+					perror("fd2");
+				}
+			}
+			
+			DEBUG_PRINT("Closed the files");
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // A list recv function for main 
 // after all threads have received the 
@@ -1008,7 +1209,7 @@ void listMainRcv()
 	{
 				if ((filename_temp=(char*)malloc(sizeof(char)*MAXCOLSIZE))<0)
 				{
-					printf("Cant Allocate space\n");
+					DEBUG_PRINT("Cant Allocate space\n");
 					break;
 				}
 
@@ -1150,7 +1351,7 @@ void listMainRcv()
 
 
 	j=0;
-	printf("\nList of files\n");
+	DEBUG_PRINT("\nList of files\n");
 
 	// List of files to be displayed 
 	for (f=0;f<total_disp_files;f++){
@@ -1175,7 +1376,7 @@ void listMainRcv()
 					DEBUG_PRINT("incomplete");
 				}
 				//DEBUG_PRINT("%s",display_list[j]);
-				printf("\n%s\n",display_list[j] );
+				DEBUG_PRINT("\n%s\n",display_list[j] );
 				j++;
 	}
 
@@ -1186,10 +1387,19 @@ void listMainRcv()
 		
 int main (int argc, char * argv[] ){
     int i=0,c=0,l=0;
+   	int k=0,temp=0;
     char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
 	
+	long int x=0; //result of MD5 in integer 
+	long int shiftvalue=0;
+			
 	pthread_t DFSThread[MAXDFSCOUNT];
+	char *MD5file;
+	char MD5_temp[MD5_DIGEST_LENGTH*2];
+	char MD5filelast[MAXDFSCOUNT];
+	int MD5length=0;
+	MD5file = MD5_temp;
 	
 	//Input of filename for config 
 	if (argc != 2){
@@ -1217,7 +1427,7 @@ int main (int argc, char * argv[] ){
 		}
 	}	
 		
-	//check if document root directory present 
+	//check if document root user present 
 	if (strcmp(config.DFCUsername,"")){
 		DEBUG_PRINT("DFCUsername %s",config.DFCUsername);
 	}
@@ -1252,6 +1462,8 @@ int main (int argc, char * argv[] ){
 	
 	//Test  of file functions 
 	//splitFile("sample.txt",4);
+	//MD5Cal("sample.txt",MD5file);
+	DEBUG_PRINT("MD5 file value %s",MD5file);
 	//mergeFile("sample.txt",4);
 	//Initiate Mutex 
   	pthread_mutex_init(&thread_mutex,NULL);
@@ -1270,6 +1482,7 @@ int main (int argc, char * argv[] ){
 
 			//Clear the command and request to Client 
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
+			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
 			bzero(command,sizeof(command));
 			//wait for input from user 
@@ -1281,7 +1494,7 @@ int main (int argc, char * argv[] ){
 
 			//bzero(ack_recv,sizeof(ack_recv));	
 			//ack_bytes=recvfrom(sock,ack_recv,sizeof(ack_recv),0,(struct sockaddr*)&remote,&addr_length);
-			strcat(command,"\n");
+			strcat(command,"\0");
 			DEBUG_PRINT("Command %s",command);
 			int cmpvalue=100;
 
@@ -1309,10 +1522,126 @@ int main (int argc, char * argv[] ){
 			list_count=0;
 			DEBUG_PRINT("List Buffer(should be empty or garbage) => %s",list);
 
+			strcpy(datatoserver.DFCRequestCommand,action[command_location]);
+			strcpy(datatoserver.DFCMergedFile,action[file_location]);
+			strcpy(requesttoserver.DFCRequestCommand,action[command_location]);
+			strcpy(requesttoserver.DFCMergedFile,action[file_location]);
 
-			//*** change logic , should not create the threads if command invalid *****
+			//IN main depending on Command 
+
+					DEBUG_PRINT("Command %s => length %d",action[command_location]);
+	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
+	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
+					
+					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
+								printf("Inside LIST");
+					}
+					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+							DEBUG_PRINT("Inside GET");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+						
+			  		}
+
+					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+							DEBUG_PRINT("Inside PUT");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							
+							
+							DEBUG_PRINT("after strcpy Command %s File%s\n",action[command_location],action[file_location]); 		
+							
+							
+								DEBUG_PRINT("MD5 Allocated");
+										MD5Cal(datatoserver.DFCMergedFile,MD5file);
+									DEBUG_PRINT("MD5 value File=>%s , %s ",datatoserver.DFCMergedFile,MD5file);
+										//x=atoi(MD5file);
+										MD5length = strlen(MD5file);
+										MD5length -=2; 
+									DEBUG_PRINT("MD5 File length=>%d",MD5length);		
+										strcpy(MD5filelast,&MD5file[MD5length])	;  
+									DEBUG_PRINT("MD5 File=>%s",MD5filelast);	
+										x=(int)strtol(MD5filelast, NULL, 16);
+									DEBUG_PRINT("MD5 int using strol value %d",x);	
+										x= x % 4;
+									DEBUG_PRINT("MD5 modulo 4 value %ld",x);		
+							
+								//}
+								DEBUG_PRINT("after MD5 Command DFC %s File%s\n",datatoserver.DFCRequestCommand, datatoserver.DFCMergedFile); 										
+								DEBUG_PRINT("after MD5 Command %s File%s\n",action[command_location],action[file_location]); 										
+								shiftvalue =x ;
+								if (x==1){
+									shiftvalue=3;
+								}
+								else if (x==3)
+								{
+									shiftvalue=1;	
+								}
+								DEBUG_PRINT("shift value %d",shiftvalue);		
+								
+
+								DEBUG_PRINT("original dest 1");
+								for (i=0 ;i<MAXDFSCOUNT;i++){
+									DEBUG_PRINT("%d",partdest1[i]);
+								}
+
+								DEBUG_PRINT("original dest 2");
+								for (i=0 ;i<MAXDFSCOUNT;i++){
+									DEBUG_PRINT("%d",partdest2[i]);
+								}
+
+								//run i from 0 to shiftvalue times 
+
+								for (i=0 ;i<=shiftvalue-1;i++){
+									temp=partdest1[0];
+									for (k=0;k<MAXDFSCOUNT-1;k++){
+										//temp=partdest1[k+1];
+										partdest1[k]= partdest1[k+1];
+									}
+									partdest1[k]= temp;
+								}
+
+								DEBUG_PRINT("Check rotate dest 1");
+								for (i=0 ;i<MAXDFSCOUNT;i++){
+									DEBUG_PRINT("%d",partdest1[i]);
+								}
+
+							// for destnation 2 
+								
+								for (i=0 ;i<=shiftvalue-1;i++){
+									temp=partdest2[0];
+									for (k=0;k<MAXDFSCOUNT-1;k++){
+										//temp=partdest1[k+1];
+										partdest2[k]= partdest2[k+1];
+									}
+									partdest2[k]= temp;
+
+								}
+								
+
+								DEBUG_PRINT("Check rotate dest 2");
+								for (i=0 ;i<MAXDFSCOUNT;i++){
+									DEBUG_PRINT("%d",partdest2[i]);
+								}
+
+								DEBUG_PRINT("Split file %s into %d",datatoserver.DFCMergedFile,MAXDFSCOUNT);
+								//split the file into MAXDFSCOUNT parts 
+								splitFile(datatoserver.DFCMergedFile,MAXDFSCOUNT);
+								
+								DEBUG_PRINT("Files are split\n");
+								DEBUG_PRINT("after Split%s File%s\n",datatoserver.DFCRequestCommand, datatoserver.DFCMergedFile); 									
+						
+			  		}
+			  		else
+			  		{	
+			  			DEBUG_PRINT("Input in correct \n");
+
+			  		}	
+
+
+			 DEBUG_PRINT("last Command %s File%s\n",action[command_location],action[file_location]); 		
+			  					//*** change logic , should not create the threads if command invalid *****
 			//Create the thread for all the communication with DFS Servers
 			for (c=0;c<MAXDFSCOUNT;c++ ){
+				//DEBUG_PRINT("DFS Thread %d",i);
 				if ((pthread_create(&DFSThread[c],NULL,DFSThreadServed,(void *)c))<0){
 					//close(server_sock);
 					perror("Thread not created");
@@ -1334,7 +1663,9 @@ int main (int argc, char * argv[] ){
 			}
 			DEBUG_PRINT("Thread join Completed \n");
 
-			//IN main depending on Command 
+
+
+
 
 					DEBUG_PRINT("Command %s => length %d",action[command_location]);
 	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
@@ -1358,7 +1689,7 @@ int main (int argc, char * argv[] ){
 							//sendcommandToDFS(requesttoserver);
 
 								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
+								//	DEBUG_PRINT("Error in get!!!\n");
 									
 								//} v
 						
@@ -1367,22 +1698,18 @@ int main (int argc, char * argv[] ){
 					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
 							DEBUG_PRINT("Inside PUT");
 							DEBUG_PRINT("File Name %s",action[file_location]);
+
 							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
 							//send command
 							//strcpy(requesttoserver.DFCRequestCommand,"PUT");
 							//sendcommandToDFS(requesttoserver);
 
 								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
+								//	DEBUG_PRINT("Error in get!!!\n");
 									
 								//} v
 						
 			  		}
-
-
-
-
-
 
 
 
