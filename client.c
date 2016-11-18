@@ -54,6 +54,8 @@ File for implementation of a Distrubuted File Client
 #define MAXCOMMANDSIZE 100
 #define MAXCONTENTSUPPORT 15
 
+#define MAXACKSIZE 10
+
 
 
 
@@ -120,8 +122,8 @@ int resource_mutex=1;
 //int partdest1[MAXDFSCOUNT][MAXDFSCOUNT]={1,2,3,4};
 //int partdest2[MAXDFSCOUNT][MAXDFSCOUNT]={2,3,4,1};
 
-int partdest1[MAXDFSCOUNT]={1,2,3,4};
-int partdest2[MAXDFSCOUNT]={2,3,4,1};
+int partdest1[MAXDFSCOUNT];
+int partdest2[MAXDFSCOUNT];
 //Call back function for thread 
 //Input is the thread id(i) - maps to the DFSIP and DFSPORT 
 
@@ -209,8 +211,10 @@ struct DataFmt{
 		char DFCRequestPass[MAXCOLSIZE];
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
+		char DFCRequestFile2[MAXCOLSIZE];
 		char DFCMergedFile[MAXCOLSIZE];
 		char DFCData[MAXPACKSIZE];
+		char DFCData2[MAXPACKSIZE];
 		int socket;
 		int DFServerId;
 };
@@ -489,9 +493,9 @@ int sendDataToDFS (struct DataFmt sendData)
 {
 
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s/%s/%s/%s/%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData);
-	DEBUG_PRINT("Data to Server => %s",sendMessage);
-
+	sprintf(sendMessage,"%s/%s/%s/%s/%s/%s/%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
+	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
 
 }
@@ -503,7 +507,7 @@ int sendcommandToDFS (struct requestCommandFmt reqCommand)
 {
 	char sendMessage[MAXBUFSIZE];
 	sprintf(sendMessage,"%s/%s/%s/%s",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCRequestFile);
-	DEBUG_PRINT("Command to Server => %s",sendMessage);
+	//DEBUG_PRINT("Command to Server => %s",sendMessage);
 
 	//Send Command
 	//for (int i = 0; i < MAXDFSCOUNT; ++i)
@@ -914,6 +918,21 @@ void *DFSThreadServed(void *Id){
 				    }
 			 		
 				    //i=0;
+    		// for destnation 1
+				DEBUG_PRINT("Check rotate dest 1");
+				for (i=0 ;i<MAXDFSCOUNT;i++){
+					DEBUG_PRINT("%d",partdest1[i]);
+				}
+
+			// for destnation 2 								
+
+				DEBUG_PRINT("Check rotate dest 2");
+				for (i=0 ;i<MAXDFSCOUNT;i++){
+					DEBUG_PRINT("%d",partdest2[i]);
+				}
+
+
+
 
 			if (connect_sucess){	    
 					printf("connected SOCKet %d",sock[DFSId]);
@@ -963,7 +982,7 @@ void *DFSThreadServed(void *Id){
 				  	}
 				  	else if ((strncmp(requesttoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
 								
-								printf("Inside Thread %d PUT",(int)DFSId);
+								DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);
 								
 
 								//strcpy(requesttoserver.DFCRequestFile,threadaction[file_location]);
@@ -1022,6 +1041,7 @@ void putDFSFile(){
 	char data[MAXPACKSIZE];
 	int temp;
 	ssize_t  file_bytes;
+	char ACK_packet[MAXACKSIZE];
 
 		
 	DEBUG_PRINT("Put DFS File");
@@ -1036,57 +1056,100 @@ void putDFSFile(){
 
 		
 
+		//destication 2 
+		//DEBUG_PRINT("Temp File 2 here %s=>%s",datatoserver.DFCRequestFile,tempFile2);
+		bzero(tempFile2,strlen(tempFile2));
+		sprintf(tempFile2,"%s.%d",tempFile3,partdest2[datatoserver.DFServerId]);
+		DEBUG_PRINT("Temp File 2 %s",tempFile2);
 
-			//open the file for this DFS dest 1
-			if((fd1= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
-				perror(datatoserver.DFCRequestFile);//if can't open
-				//send to client the error
-				DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
-				//return -1;
-			}
-			else // open file successful ,read file 
-			{
-				//read bytes and send 
-				bzero(data,sizeof(data));
-				if(file_bytes = read(fd1,data,MAXPACKSIZE) > 0){//read data from file 	
-					//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
-					strcpy(datatoserver.DFCData,data);
-					DEBUG_PRINT("Read data from%s=>%s ",datatoserver.DFCRequestFile,data);	
-				}	
+
+		//open the file for this DFS dest 1
+		if((fd1= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
+			perror(datatoserver.DFCRequestFile);//if can't open
+			//send to client the error
+			DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
+			//return -1;
+		}
+		else // open file successful ,read file 
+		{
+			//read bytes and send 
+			bzero(data,sizeof(data));
+			if(file_bytes = read(fd1,data,MAXPACKSIZE) > 0){//read data from file 	
+				//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
+				strcpy(datatoserver.DFCData,data);
+				//DEBUG_PRINT("Read data from%s=>%s ",datatoserver.DFCRequestFile,data);	
 			}	
-			sendDataToDFS(datatoserver);//send data to 
+		}	
+		
+		strcpy(datatoserver.DFCRequestFile2,tempFile2);
 
-
-
-
-			//destication 2 
-			DEBUG_PRINT("Temp File 2 here %s=>%s",datatoserver.DFCRequestFile,tempFile2);
-			bzero(tempFile2,strlen(tempFile2));
-			sprintf(tempFile2,"%s.%d",tempFile3,partdest2[datatoserver.DFServerId]);
-			DEBUG_PRINT("Temp File 2 %s",tempFile2);
-			strcpy(datatoserver.DFCRequestFile,tempFile2);
-
-
-			//open the file for this DFS dest 1
-			if((fd2= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
-				perror(datatoserver.DFCRequestFile);//if can't open
-				//send to client the error
-				DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
-				//return -1;
-			}
-			else // open file successful ,read file 
-			{
-				//read bytes and send 
-				bzero(data,sizeof(data));
-				if(file_bytes = read(fd2,data,MAXPACKSIZE) > 0){//read data from file 	
-					//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
-					strcpy(datatoserver.DFCData,data);
-					DEBUG_PRINT("Read data from%s=> ",datatoserver.DFCRequestFile,data);	
-				}	
+		//open the file for this DFS dest 1
+		if((fd2= open(datatoserver.DFCRequestFile2,O_RDONLY)) <0 ){//open read only file 
+			perror(datatoserver.DFCRequestFile2);//if can't open
+			//send to client the error
+			DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile2);
+			//return -1;
+		}
+		else // open file successful ,read file 
+		{
+			//read bytes and send 
+			bzero(data,sizeof(data));
+			if(file_bytes = read(fd2,data,MAXPACKSIZE) > 0){//read data from file 	
+				//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
+				strcpy(datatoserver.DFCData2,data);
+				//DEBUG_PRINT("Read data from%s=> ",datatoserver.DFCRequestFile,data);	
 			}	
-			sendDataToDFS(datatoserver);//send data to 
-			DEBUG_PRINT("Trying to close files");
-			
+		}	
+
+		sendDataToDFS(datatoserver);//send data to 				
+
+		DEBUG_PRINT("Sending 1st and 2nd File to %s part %d",config.DFSName[datatoserver.DFServerId],partdest1[datatoserver.DFServerId],partdest2[datatoserver.DFServerId]);
+		/*
+		
+				//sleep(1);
+				sendDataToDFS(datatoserver);//send data to 
+				DEBUG_PRINT("Sending 2nd file to %s part %d",config.DFSName[datatoserver.DFServerId],partdest2[datatoserver.DFServerId]);
+		*/
+				/*
+		DEBUG_PRINT("Waiting for ACK................");	
+		bzero(ACK_packet,sizeof(ACK_packet));	
+		//nbytes = recv(sock[datatoserver.DFServerId],ACK_packet,sizeof(ACK_packet),0);		
+		do{
+				if(!strncmp(ACK_packet,"ACK",strlen("ACK"))){
+					DEBUG_PRINT("received ACK=> %s",ACK_packet);
+					strcpy(datatoserver.DFCRequestFile,tempFile2);
+
+					//open the file for this DFS dest 1
+					if((fd2= open(datatoserver.DFCRequestFile,O_RDONLY)) <0 ){//open read only file 
+						perror(datatoserver.DFCRequestFile);//if can't open
+						//send to client the error
+						DEBUG_PRINT("Error in File openeing %s",datatoserver.DFCRequestFile);
+						//return -1;
+					}
+					else // open file successful ,read file 
+					{
+						//read bytes and send 
+						bzero(data,sizeof(data));
+						if(file_bytes = read(fd2,data,MAXPACKSIZE) > 0){//read data from file 	
+							//DEBUG_PRINT("Error in File openeing =>%s=>",datatoserver.DFCRequestFile);	
+							strcpy(datatoserver.DFCData,data);
+						    DEBUG_PRINT("Read data from%s=> ",datatoserver.DFCRequestFile,data);	
+						    sendDataToDFS(datatoserver);//send data to 
+							DEBUG_PRINT("Sending 2nd file to %s part %d",config.DFSName[datatoserver.DFServerId],partdest2[datatoserver.DFServerId]);
+							DEBUG_PRINT("Waiting for ACK");
+							nbytes = recv(sock[datatoserver.DFServerId],ACK_packet,sizeof(ACK_packet),0);			
+							if(!strncmp(ACK_packet,"ACK",strlen("ACK"))){
+								DEBUG_PRINT("received ACK=> %s",ACK_packet);
+								break;//ACK recived and next file send 	
+							}	
+						}	
+						
+					}	
+					//sleep(1);
+					
+				}	
+		}while(nbytes = recv(sock[datatoserver.DFServerId],ACK_packet,sizeof(ACK_packet),0)>0);		
+		*/
 			if(fd1){
 				if(close(fd1)<0){
 					perror("fd1");
@@ -1485,6 +1548,16 @@ int main (int argc, char * argv[] ){
 			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
 			bzero(command,sizeof(command));
+			partdest1[0]=1;
+			partdest1[1]=2;
+			partdest1[2]=3;
+			partdest1[3]=4;
+			partdest2[0]=2;
+			partdest2[1]=3;
+			partdest2[2]=4;
+			partdest2[3]=1;
+			//partdest2[MAXDFSCOUNT]={2,3,4,1};
+
 			//wait for input from user 
 			fgets(command,MAXCOMMANDSIZE,stdin);
 			if ((strlen(command)>0) && (command[strlen(command)-1]=='\n')){
@@ -1554,14 +1627,14 @@ int main (int argc, char * argv[] ){
 										MD5Cal(datatoserver.DFCMergedFile,MD5file);
 									DEBUG_PRINT("MD5 value File=>%s , %s ",datatoserver.DFCMergedFile,MD5file);
 										//x=atoi(MD5file);
-										MD5length = strlen(MD5file);
-										MD5length -=2; 
+									MD5length = strlen(MD5file);
+									MD5length -=2; 
 									DEBUG_PRINT("MD5 File length=>%d",MD5length);		
-										strcpy(MD5filelast,&MD5file[MD5length])	;  
+									strcpy(MD5filelast,&MD5file[MD5length])	;  
 									DEBUG_PRINT("MD5 File=>%s",MD5filelast);	
-										x=(int)strtol(MD5filelast, NULL, 16);
+									x=(int)strtol(MD5filelast, NULL, 16);
 									DEBUG_PRINT("MD5 int using strol value %d",x);	
-										x= x % 4;
+									x= x % 4;
 									DEBUG_PRINT("MD5 modulo 4 value %ld",x);		
 							
 								//}
@@ -1711,23 +1784,7 @@ int main (int argc, char * argv[] ){
 						
 			  		}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-			DEBUG_PRINT("Deallocate memory for command");
+			DEBUG_PRINT("Deallocate memory for command\n");
 			//Free the command allocated 
 			if (action!=NULL){
 				//free alloaction of memory 

@@ -106,7 +106,8 @@ typedef enum PACKETLOCATION{
 							DFCCommandloc,//Command Location
 							DFCFileloc,//Command Location
 							DFCDataloc,//Data Location
-							
+							DFCFile2loc,//Command Location
+							DFCData2loc,//Data Location
 						}PACKET_LC;// Resource format
 
 
@@ -128,10 +129,12 @@ struct DataFmt{
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
 		char DFCData[MAXPACKSIZE];
+		char DFCRequestFile2[MAXCOLSIZE];
+		char DFCData2[MAXPACKSIZE];
 		int socket;
 };
 
-
+struct DataFmt datafromClient;// for data from client
 
 //For IP:PORT
 
@@ -228,7 +231,7 @@ int splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int ma
 		memset(splitop[sizeofip],0,sizeof(splitop[sizeofip]));
 		strncpy(splitop[sizeofip],p,strlen(p));
 		strcat(splitop[sizeofip],"\0");
-		DEBUG_PRINT	("%d : %s",sizeofip,splitop[sizeofip]);
+		//DEBUG_PRINT	("%d : %s",sizeofip,splitop[sizeofip]);
 		sizeofip++;
 
 		//get next token 
@@ -533,6 +536,7 @@ int list(char * directory,int listsock){
 		return -1;
 	}
 	
+
 	DEBUG_PRINT(" socket => %d ",listsock);
 	DEBUG_PRINT(" directory=> %s send => %s,",directory,listtosend);
 	//Send the files to client 
@@ -560,217 +564,69 @@ O/p :file is rcvd from client
 Reference for  basic understanding :
 https://lms.ksu.edu.sa/bbcswebdav/users/mdahshan/Courses/CEN463/Course-Notes/07-file_transfer_ex.pdf	  
 **************************************************************/
-/*
-int rcvFile (char *filename){
+
+int rcvFile (char *filename,char *dataInput){
 	
 	int fd; // File decsriptor 
 	ssize_t file_bytes=0;
 	int file_size=0;
 	int rcount=0;//count for send count 
-
-	
-	char *err_indication = "Error"; 
-	char *comp_indication = "Comp"; 
-	char recv_pack[MAXPACKSIZE+1];
-	char packet_no[PACKETNO];
-	char prev_pack_no[PACKETNO];
-	char rcvd_packet_no[PACKETNO];
-	char rcvd_size[SIZEMESSAGE];
-	char recv_frame[MAXFRAMESIZE];
+	char tempFile[MAXCOLSIZE];	
 	int  rcvd_bytes;
-	int  pos_data=0;
-	int  pos_size=0;
-	char *MD5_Client,*MD5_Server;
-	MD5_Client =(char *)malloc(MD5_DIGEST_LENGTH*2*sizeof(char));
-	if (MD5_Client == NULL)
-	{
-		perror(MD5_Client);
-		return -1;
-
-	}
-	MD5_Server =(char*)malloc(MD5_DIGEST_LENGTH*2*sizeof(char));
-	if (MD5_Server == NULL)
-	{
-		perror(MD5_Server);
-		return -1;
-	}
-	//clear Md5
-	bzero(MD5_Client,sizeof(MD5_Client));
-	bzero(MD5_Server,sizeof(MD5_Server));
-
-
-	file_bytes =recvfrom(sock,recv_frame,sizeof(recv_frame),0,(struct sockaddr*)&sin,&remote_length);	
-	//copy the data of file 
 	
-	if (strchr(recv_frame,'|')){
-		//printf("file to write  %s\n",recv_pack );
-	}
-	else
-	{
-		//printf("Cant find | before loop \n");
-		strcpy(recv_pack,recv_frame);
-	}
-	//open the file
-	if (strcmp(recv_pack,err_indication)==0 && file_bytes >0 ){//check for error Message from server
-				file_bytes =recvfrom(sock,recv_frame,sizeof(recv_frame),0,(struct sockaddr*)&sin,&remote_length);	
-				printf("\n%s\n",recv_pack );
-				rcount =-1;
-				//return -1;
-			}
-	else if((fd= open(filename,O_CREAT|O_RDWR|O_TRUNC,0666)) <0){//open a file to store the data in file
+	//switch directory according to user name 
+	char cwd[1024];
+
+	//Append a "." for indication of piece file  
+	bzero(tempFile,sizeof(tempFile));
+	
+	sprintf(tempFile,".%s",filename);
+	strcpy(filename,tempFile);
+    bzero(cwd,sizeof(cwd));
+    DEBUG_PRINT("Before cwd : %s\n", cwd);
+
+    getcwd(cwd, sizeof(cwd));
+    DEBUG_PRINT("Current working dir: %s\n", cwd);
+    DEBUG_PRINT("Config dir: %s\n", config.DFSdirectory);
+    DEBUG_PRINT("Request User %s\n", datafromClient.DFCRequestUser);
+    DEBUG_PRINT("Request File %s\n",filename);
+    sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+    DEBUG_PRINT("Change working dir: %s\n", cwd);
+    chdir(cwd);
+	strcpy(filename,cwd);    
+    //getcwd(cwd, sizeof(cwd));
+    //DEBUG_PRINT("New working dir: %s\n", cwd);
+    //DEBUG_PRINT("%s",)
+	if((fd= open(filename,O_CREAT|O_RDWR|O_TRUNC,0666)) <0){//open a file to store the data in file
 		perror(filename);//if can't open
 		return -1;
 	}
 	else // open file successfully ,read file 
 	{
 		//debug 
-		//check if any bytes read 
-		do
-		{
-			//split packet no and data 
-			if (strchr(recv_frame,'|')){
-				//extract packet No
-				pos_size =(int)(strchr(recv_frame,'|') - recv_frame)+1;//posintion of '|'
-				
-				memcpy(rcvd_packet_no,recv_frame,pos_size-1);//packet of data 
-				rcvd_packet_no[pos_size+1]='\0';
-				
-				//extract Size of Packet 
-				pos_data =(int)(strchr(&recv_frame[pos_size],'|') - recv_frame)+1;
-				memcpy(rcvd_size,&recv_frame[pos_size],pos_data-(pos_size));
-				rcvd_size[pos_data+1]='\0';
-				
-				rcvd_bytes=strtol(rcvd_size,NULL,10);
-
-				//extract File Data
-				memcpy(recv_pack,&recv_frame[pos_data],rcvd_bytes);//packet of data 
-
-				recv_pack[rcvd_bytes]='\0';
-
-				//printf("pos size,pos data %d %d %d\n",pos_size,pos_data,(int)sizeof(recv_frame));
-				//printf("From Client Packet:Size  %s %s\n",rcvd_packet_no,rcvd_size);	
-				//printf("%s\n",recv_pack );	
-			}
-			else
-			{
-				//printf("Cant find | \n");
-				strcpy(recv_pack,recv_frame);
-			}
-			
-			if (strcmp(recv_pack,comp_indication)==0)//check for File Completion
-			{
-				//printf("\n%s\n",recv_pack );
-				break;
-			}
-		#ifndef RELIABILITY
-			else if(write(fd,recv_pack,rcvd_bytes)<0){//write to file , with strlen as sizeof has larger value 
-						perror("Error for writing to file");
-						rcount =-1;	
-				}
-			else// when write has be done
-			{	
-					//printf("packetno:bytes:written bytes %d:%d:%d\n",rcount,(int)file_bytes,rcvd_bytes );
-					file_size = file_size + rcvd_bytes;
-					strcmp(prev_pack_no,packet_no);		
-		        	rcount++;//recvd packet counter
-		        	//FOmrating ACK|PacketNO
-					bzero(ack_message,sizeof(ack_message));
-					//sprintf(packet_no,"%d",(int)strtol(rcvd_packet_no,NULL,10));
-					strcpy(ack_message,"ACK");
-					strcat(ack_message,rcvd_packet_no);
-					sendtoClient(ack_message,sizeof(ack_message),NOACK);
-
-			}
-	    #else
-	      
-			else if (!strcmp(prev_pack_no,rcvd_packet_no)){//check if packet was already recieved before and ACK was missed 
-					//strcat(ack_message,sprintf(packet_no,"%d",);
-					strcpy(ack_message,"ACK");
-					strcat(ack_message,prev_pack_no);
-					//printf("Resending ACK %s\n",ack_message );
-					sendtoClient(ack_message,sizeof(ack_message),NOACK);	
-			}	
-			else{//if previous packet no is not same as present 
-			
-				if(write(fd,recv_pack,rcvd_bytes)<0){//write to file , with strlen as sizeof has larger value 
+		DEBUG_PRINT("Data %s",dataInput);
+		if(write(fd,dataInput,strlen(dataInput))<0){//write to file , with strlen as sizeof has larger value 
 					perror("Error for writing to file");
 					rcount =-1;	
-				}
-				else// when write has be done
-				{
-				
-					//printf("packetno:bytes:written bytes %d:%d:%d\n",rcount,(int)file_bytes,rcvd_bytes );
-					file_size = file_size + rcvd_bytes;//Calculate the complete file Size 
-					
-		        
-		        	rcount++;//recvd packet counter
-		        	
-		        	//Fomrating ACK|PacketNO
-					bzero(ack_message,sizeof(ack_message));
-					strcpy(ack_message,"ACK");
-					sprintf(packet_no,"%d",(int)strtol(rcvd_packet_no,NULL,10));
-					strcat(ack_message,packet_no);
-					sendtoClient(ack_message,sizeof(ack_message),NOACK);
-					strcpy(prev_pack_no,rcvd_packet_no);
-
-		        }
-	        
-			}
-		#endif							
-			
-			file_bytes =0 ;
-			pos_data =0;
-			bzero(recv_pack,sizeof(recv_pack));
-			bzero(recv_frame,sizeof(recv_frame));
-		}while(((file_bytes =recvfrom(sock,recv_frame,sizeof(recv_frame),0,(struct sockaddr*)&sin,&remote_length))) >0);//read file 
-		//while (file_bytes=recv_packet(recv_frame,sizeof(recv_frame))>0);
-
-
-		if (rcount >0){				
-				printf("Rcvxd packet: total Bytes %d:%d\n",rcount,(int )file_size);	
-		}	
-		// Close file	
-		if(close(fd) <0)//check if file closed 
-		{
-			perror(filename);
-			rcount =-1;
-		}					
-		
-		//Receive MD5 value from Server,//Wait for MD5 hash value 
-		if(file_bytes =recvfrom(sock,MD5_Client,MD5_DIGEST_LENGTH*2,0,(struct sockaddr*)&sin,&remote_length)>0){
-			MD5Cal(filename,MD5_Server);//Calculate for file at Client end 
-			//printf("Client: %s\n Server: %s\n",MD5_Client,MD5_Server);
-			//Compare 
-			if(!strcmp(MD5_Client,MD5_Server))
-			{
-				printf("Recieved File match with Client \n" );	
-			}
-			else
-			{
-				printf("Retry ,Files dont match!!\n");		
-			}
 		}
-		//Acknowledge  
-	}
-	//printf("Completed Rcvxd Routine\n");
-	free(MD5_Client);
-	free(MD5_Server);
+		else// when write has be done
+		{	
+				DEBUG_PRINT("Data written to %s",filename);
 
+		}
 
-	bzero(recv_pack,sizeof(recv_pack));
-	bzero(packet_no,sizeof(packet_no));
-	//bzero(prev_pack_no,sizeof(prev_pack_no));
-	bzero(rcvd_packet_no,sizeof(rcvd_packet_no));
-	bzero(rcvd_size,sizeof(rcvd_size));
-	bzero(recv_frame,sizeof(recv_frame));
-	rcvd_bytes=0;
-	pos_data=0;
-	pos_size=0;
+		if(fd){
+			DEBUG_PRINT("Close File");
+			close(fd);
+		}
+	}		
 
+	bzero(tempFile,sizeof(tempFile));
+	bzero(filename,sizeof(filename));
 	return rcount;
 }
 
-*/
+
 
 
 /*************************************************************
@@ -894,6 +750,7 @@ void *client_connections(void *client_sock_id){
 char (*action)[MAXCOLSIZE];
 
 void *client_connections(void *client_sock_id)
+//void client_connections (int client_sock_id)
 {
 	
 	
@@ -901,6 +758,7 @@ void *client_connections(void *client_sock_id)
 	int thread_sock = (int*)(client_sock_id);
 	ssize_t read_bytes=0;
 	char message_client[MAXPACKSIZE];//store message from client 
+	char message_client_file2[MAXPACKSIZE];//store message from client 
 	char message_bkp[MAXPACKSIZE];//store message from client 
 	char command[MAXPACKSIZE];
 	char (*packet)[MAXCOLSIZE];
@@ -910,11 +768,12 @@ void *client_connections(void *client_sock_id)
 		//Clear the command and request to Client 
 		bzero(message_client,sizeof(message_client));
 
-		
-
+		datafromClient.socket=0;	
+		datafromClient.socket=thread_sock;
 		// Recieve the message from client  and reurn back to client 
-		if((read_bytes =recv(thread_sock,message_client,MAXPACKSIZE,0))>0){
+		if((read_bytes =recv(thread_sock,message_client,sizeof(message_client),0))>0){
 
+			DEBUG_PRINT("Read Bytes %d",read_bytes);	
 			//printf("request from client %s\n",message_client );
 			strcpy(message_bkp,message_client);//backup of orginal message 
 			DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
@@ -927,13 +786,30 @@ void *client_connections(void *client_sock_id)
 			//
 				if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
 				total_attr_commands=0;
-				if((total_attr_commands=splitString(message_client,"/",packet,5)>0))
+
+
+				if((total_attr_commands=splitString(message_client,"/",packet,9)>0))
 				{
-	   				DEBUG_PRINT("User %s => length %d",packet[DFCUserloc]);
-	   				DEBUG_PRINT("Password %s",packet[DFCPassloc]);
+					//copy contents to data structure of data struture 
+					strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
+					strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
+					strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
+					strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
+					strcpy(datafromClient.DFCData,packet[DFCDataloc]);
+					strcpy(datafromClient.DFCRequestFile2,packet[DFCFile2loc]);
+					strcpy(datafromClient.DFCData2,packet[DFCData2loc]);
+
+	   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
+	   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
+	   				DEBUG_PRINT("Command %s",datafromClient.DFCRequestCommand);
+	   				DEBUG_PRINT("File 1 %s",datafromClient.DFCRequestFile);
+	   				DEBUG_PRINT("Data 1 %s ",datafromClient.DFCData);
+	   				DEBUG_PRINT("File 2 %s",datafromClient.DFCRequestFile2);	   				
+	   				DEBUG_PRINT("Data 2 %s ",datafromClient.DFCData2);
+	   				
 	   				//DEBUG_PRINT("Total Commands %d",total_attr_commands);
 					
-					if ((strncmp(packet[DFCCommandloc],"LIST",strlen("LIST"))==0)){
+					if ((strncmp(datafromClient.DFCRequestCommand,"LIST",strlen("LIST"))==0)){
 						//send command
 						DEBUG_PRINT("Inside LIST");
 						//bzero(directory,strlen(directory));
@@ -950,9 +826,10 @@ void *client_connections(void *client_sock_id)
 						//sendCommand();				
 						//listRcv();								
 					}
-					else if ((strncmp(packet[DFCCommandloc],"GET",strlen("GET")))==0){
+					else if ((strncmp(datafromClient.DFCRequestCommand,"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");
 							DEBUG_PRINT("File Name %s",packet[DFCFileloc]);
+
 							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
 							//send command
 							//strcpy(requesttoserver.DFCRequestCommand,"GET");
@@ -965,20 +842,126 @@ void *client_connections(void *client_sock_id)
 						
 			  		}
 
-					else if ((strncmp(packet[DFCCommandloc],"PUT",strlen("PUT")))==0){
-							DEBUG_PRINT("Inside PUT");
-							DEBUG_PRINT("File Name %s",packet[DFCFileloc]);
-							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							//strcpy(requesttoserver.DFCRequestCommand,"PUT");
-							//sendcommandToDFS(requesttoserver);
+					else if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
+							DEBUG_PRINT("Inside PUT 1st time");
+							DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
+							rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData);//Recieve the part files 		
+							rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2);
+							//DEBUG_PRINT("Sending ACK");
+							//send(thread_sock,"ACK",strlen("ACK"),0);
 
-								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
-									
-								//} v
-						
+							//bzero(message_client_file2,sizeof(message_client_file2));
+							//read_bytes=0;
+							//DEBUG_PRINT("Wating for 2nd file..");
+							/*
+							nbytes=0;
+							do{
+									nbytes = recv(thread_sock,message_client_file2,sizeof(message_client_file2),0);
+									DEBUG_PRINT("nbytes %d",(int)nbytes);
+										nbytes = strlen(message_client_file2);
+										DEBUG_PRINT("Message from Client 2",message_client_file2);
+										//
+										bzero(packet[DFCUserloc],sizeof(packet[DFCUserloc]));
+										bzero(packet[DFCPassloc],sizeof(packet[DFCPassloc]));
+										bzero(packet[DFCCommandloc],sizeof(packet[DFCCommandloc]));
+										bzero(packet[DFCFileloc],sizeof(packet[DFCFileloc]));
+										bzero(packet[DFCDataloc],sizeof(packet[DFCDataloc]));
+										if(nbytes>0){
+											if ((strlen(message_client_file2)>0) && (message_client_file2[strlen(message_client_file2)-1]=='\n')){
+												message_client_file2[strlen(message_client_file2)-1]='\0';
+											}	
+											if((total_attr_commands=splitString(message_client_file2,"/",packet,7)>0)){
+												//copy contents to data structure of data struture 
+												strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
+												strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
+												strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
+												strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
+												strcpy(datafromClient.DFCData,packet[DFCDataloc]);
+
+								   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
+								   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
+								   				DEBUG_PRINT("Command %s",datafromClient.DFCRequestCommand);
+								   				DEBUG_PRINT("File %s",datafromClient.DFCRequestFile);
+								   				//DEBUG_PRINT("Data %s ",datafromClient.DFCData);
+
+												if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
+													DEBUG_PRINT("Inside PUT 2nd time");
+													DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
+													rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
+													DEBUG_PRINT("Sending for file 2 ACK");
+													send(thread_sock,"ACK",strlen("ACK"),0);
+
+													break;
+												}		
+
+								   			}
+								   			else
+								   			{
+								   				printf("Cant Split the command \n");
+								   			}	
+										}
+										//sleep(1);
+										
+										
+							}//while(nbytes = recv(sock[datatoserver.DFServerId],message_client,sizeof(message_client),0)>0);		
+							while(nbytes <=0);		
+							*/
+							//thread_sock
+							/*
+							while((read_bytes =recv(thread_sock,message_client,strlen(message_client),0))<0){
+								
+							
+								DEBUG_PRINT("Read Bytes %d",read_bytes);	
+								//printf("request from client %s\n",message_client );
+								strcpy(message_bkp,message_client);//backup of orginal message 
+								DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
+								DEBUG_PRINT("Message from Client => %s \n",message_client );
+
+								if ((strlen(message_client)>0) && (message_client[strlen(message_client)-1]=='\n')){
+										message_client[strlen(message_client)-1]='\0';
+								}
+
+								//
+								if((total_attr_commands=splitString(message_client,"/",packet,7)>0))
+								{
+									//copy contents to data structure of data struture 
+									strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
+									strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
+									strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
+									strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
+									strcpy(datafromClient.DFCData,packet[DFCDataloc]);
+
+					   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
+					   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
+					   				DEBUG_PRINT("Command %s",datafromClient.DFCRequestCommand);
+					   				DEBUG_PRINT("File %s",datafromClient.DFCRequestFile);
+					   				//DEBUG_PRINT("Data %s ",datafromClient.DFCData);
+
+									if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
+										DEBUG_PRINT("Inside PUT 2nd time");
+										DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
+										rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
+										//break;
+									}		
+
+					   			}
+					   			else
+					   			{
+					   				printf("Cant Split the command \n");
+					   			}	
+								
+					   			//rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
+
+					   		}
+					   		*/
+					   		
 			  		}
+			  		else
+			  		{
+			  			printf("Incorrect Command  \n");
+
+
+			  		}	
 			  	}	
 				else
 				{
@@ -991,167 +974,6 @@ void *client_connections(void *client_sock_id)
 				perror("Allocation for command ");
 			}
 
-
-
-
-			/*
-			action = &temp;
-			bzero(command,sizeof(command));
-			bzero(action,sizeof(action));	
-			
-			//waits for an incoming message
-			nbytes = recvfrom(sock,command,sizeof(command),0,(struct sockaddr*)&sin,&remote_length);
-			if ((strlen(command)>0) && (command[strlen(command)-1]=='\n')){
-					command[strlen(command)-1]='\0';
-			}
-			//memcpy(command,command,sizeof(command)-1);			
-			if(garbage_count)
-			{
-				check_bytes=0;
-			}
-			sendtoClient(ack_message,sizeof(ack_message),NOACK);
-			//Messaged received successfully
-			//printf("\nRxcv command : %s bytes %d \n",command,nbytes );
-			strcat(command,"\0");
-			if (nbytes >0){
-					total_attr_commands=splitString(command," ",action);	
-						if(total_attr_commands>=0)
-						{
-								//printf("Command not supported\n");
-								
-							int count=0;
-							action = &temp;
-							garbage_count++;
-							//printf("Action : %s\n",**action );
-							//Check type of command
-							if (strcmp(**action,"ls")==0){							
-										**action++;//gr
-										//printf("value after ls :%s\n", **action);
-										if (strlen(**action)>check_bytes){
-										//	printf("Command not supported\n");
-											sendtoClient("Command not supported",sizeof("Command not supported"),NOACK);							
-										}	
-										else if(list()<0){
-										//		printf("Error in listing!!!\n");
-												sendtoClient("Error",sizeof("Error"),NOACK);
-											}		
-									}
-							else if (strcmp(**action,"get")==0){
-										//printf("in get\n");
-										**action++;//gr
-										if(sendFile(**action) <0){	
-											//printf("Error in get!!!\n");
-											sendtoClient("Error",sizeof("Error"),NOACK);
-										}
-									}
-							else if (strcmp(**action,"put")==0){
-										//printf("in put\n");
-										**action++;
-										//printf("File %s\n",**action);
-										if(rcvFile(**action) <0){	
-											//printf("Error in put!!!\n");
-											//sendtoClient("Error");
-										}
-									}
-							else if (strcmp(**action,"exit")==0){
-										printf("Exiting server .........\n");
-										close(sock);
-										break;
-									}
-							else 	{
-										sendtoClient(command,sizeof(command),NOACK);
-										//printf("Command not supported\n");
-									}
-							//clearing the split value 		
-							bzero(action,sizeof(action));		
-						}	
-							
-			}
-
-			//sendtoClient(msg);
-		}
-			
-		//close the socket 
-		close(sock);
-	*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-			
-			/*			
-			if ((split_attr=malloc(sizeof(split_attr)*MAXCOLSIZE))){	
-				strcpy(split_attr[HttpVersion],"HTTP/1.1");//Default
-				strcpy(split_attr[HttpMethod],"GET");//Default
-				strcpy(split_attr[HttpURL],"index.html");//No data 
-	
-				if((total_attr_commands=splitString(message_client," ",split_attr,4))<0)
-				{
-					DEBUG_PRINT("Error in split\n");
-
-					//printf("%s\n", );
-					bzero(message_client,sizeof(message_client));	
-					bzero(split_attr,sizeof(split_attr));	
-					return NULL;
-				}
-				else
-				{
-					
-					bzero(message_client,sizeof(message_client));	
-					bzero(split_attr,sizeof(split_attr));				
-					DEBUG_PRINT("Cannot split input request");
-				}
-				//print the split value 
-				
-				for(i=0;i<total_attr_commands;i++){
-					DEBUG_PRINT("%d %s\n",i,split_attr[i]);
-				}
-				
-				//printf("in client connections%s\n",message_bkp);
-				
-				responsetoClient(split_attr,thread_sock,message_bkp);
-							
-				//free alloaction of memory 
-				for(i=0;i<total_attr_commands;i++){
-					free((*split_attr)[i]);
-				}
-				
-				free(split_attr);//clear  the request recieved 
-						
-			}
-			else 
-			{
-					error_response("500 Internal Server Error",split_attr[HttpURL],thread_sock,split_attr[HttpVersion],"Invalid File Name");
-					perror("alloacte 2d pointer");
-					exit(-1);
-			}		
-
-		}
-		if (read_bytes < 0){
-			perror("recv from client failed ");
-			return NULL;
-
-		}
-	*/
 	}
 		
 	DEBUG_PRINT("Completed \n");
@@ -1287,48 +1109,50 @@ int main (int argc, char * argv[] ){
 
 
 	DEBUG_PRINT("Server is running wait for connections");
+	while(1){
+		//Accept incoming connections 
+		datafromClient.socket=0;
+		while((client_sock = accept(server_sock,(struct sockaddr *) &client, (socklen_t *)&remote_length))){
+			if(client_sock<0){	
+				perror("accept  request failed");
+				exit(-1);
+				close(server_sock);
+			}
+			DEBUG_PRINT("connection accepted  %d \n",(int)client_sock);	
+			mult_sock = (int *)malloc(1);
+			if (mult_sock== NULL)//allocate a space of 1 
+			{
+				perror("Malloc mult_sock unsuccessful");
+				close(server_sock);
+				exit(-1);
+			}
+			DEBUG_PRINT("Malloc successfully\n");
+			//bzero(mult_sock,sizeof(mult_sock));
+			*mult_sock = client_sock;
 
-	//Accept incoming connections 
-	while((client_sock = accept(server_sock,(struct sockaddr *) &client, (socklen_t *)&remote_length))){
-		if(client_sock<0){	
-			perror("accept  request failed");
-			exit(-1);
-			close(server_sock);
-		}
-		DEBUG_PRINT("connection accepted  %d \n",(int)client_sock);	
-		mult_sock = (int *)malloc(1);
-		if (mult_sock== NULL)//allocate a space of 1 
-		{
-			perror("Malloc mult_sock unsuccessful");
-			close(server_sock);
-			exit(-1);
-		}
-		DEBUG_PRINT("Malloc successfully\n");
-		//bzero(mult_sock,sizeof(mult_sock));
-		*mult_sock = client_sock;
-
-		DEBUG_PRINT("connection accepted  %d \n",*mult_sock);	
-		
-		//Create the pthread 
-		if ((pthread_create(&client_thread,NULL,client_connections,(void *)(*mult_sock)))<0){
-			close(server_sock);
-			perror("Thread not created");
-			exit(-1);
-
-		}			
+			DEBUG_PRINT("connection accepted  %d \n",*mult_sock);	
 			
-		/*
-		//as it does  have to wait for it to join thread ,
-		//does not allow multiple connections 
-		if(pthread_join(client_thread, NULL) == 0)
-		 printf("Client Thread done\n");
-		else
-		 perror("Client Thread");
-		 */
-		free(mult_sock);
-		DEBUG_PRINT("Freed");
+			//Create the pthread 
+			if ((pthread_create(&client_thread,NULL,client_connections,(void *)(*mult_sock)))<0){
+				close(server_sock);
+				perror("Thread not created");
+				exit(-1);
 
-	}	
+			}			
+				
+			/*
+			//as it does  have to wait for it to join thread ,
+			//does not allow multiple connections 
+			if(pthread_join(client_thread, NULL) == 0)
+			 printf("Client Thread done\n");
+			else
+			 perror("Client Thread");
+			 */
+			free(mult_sock);
+			DEBUG_PRINT("Freed");
+
+		}	
+	}
 	if (client_sock < 0)
 	{
 		perror("Accept Failure");
