@@ -62,7 +62,7 @@ File for implementation of a Distrubuted File Client and Server
 
 
 
-#define DEBUGLEVEL
+//#define DEBUGLEVEL
 
 #ifdef DEBUGLEVEL
 	#define DEBUG 1
@@ -129,7 +129,9 @@ int partdest2[MAXDFSCOUNT];
 //Call back function for thread 
 //Input is the thread id(i) - maps to the DFSIP and DFSPORT 
 
+enum ERR_STATE {CRED_ERROR,CRED_FAIL,CRED_PASS};
 
+int passCred=CRED_FAIL;
 
 
 
@@ -713,7 +715,7 @@ int splitFile(char *sourcefilename,int parts)
     rewind(sourceFile);// Change the pointer back to original
     bzero(destFileName,strlen(destFileName));
     sprintf(destFileName, "%s.%d", sourcefilename, i);// Format <sourcefilename>.<i> eg:#file.txt.1
-    printf("Split File name %s=>",destFileName);
+    DEBUG_PRINT("Split File name %s=>",destFileName);
     splitFile = fopen(destFileName, "wb");//Open the destincation file
     if (splitFile==NULL)// if file closed or not
     {
@@ -758,7 +760,7 @@ int splitFile(char *sourcefilename,int parts)
     if(sourceFile){
     	fclose(sourceFile);
     }	
-   printf("after completed split %s File%s\n",action[command_location],action[file_location]); 										
+   DEBUG_PRINT("after completed split %s File%s\n",action[command_location],action[file_location]); 										
 }
 
 
@@ -882,7 +884,7 @@ void *DFSThreadServed(void *Id){
 			MD5file = MD5_temp;
 			
 	
-			printf("Command %s File%s\n",action[command_location],action[file_location]);	
+			DEBUG_PRINT("Command %s File%s\n",action[command_location],action[file_location]);	
 			DEBUG_PRINT("DFS Id connection %d\n",(int)DFSId);
 			//Create multiple Socket and connect them (TCP)
 			//for (i=0;i<MAXDFSCOUNT;i++){
@@ -959,11 +961,23 @@ void *DFSThreadServed(void *Id){
 							fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
 						}
 						
+						DEBUG_PRINT("\n%s\n",list[list_count] );
+						if (!strncmp(list[list_count],"Invalid",strlen("Invalid")))
+						{
+							printf("\n%s\n",list[list_count] );
+							passCred=CRED_FAIL;
+						}
+						else{								
+							DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
+							passCred=CRED_PASS;
+							list_count++;
+						}
 						//#else
 							//nbytes = recvfrom(sock,buffer,sizeof(buffer),0,(struct sockaddr*)&remote,&addr_length);
 						//#endif	
-						DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
-						list_count++;
+						//Add for credentials and break
+
+
 					}
 					else if ((strncmp(requesttoserver.DFCRequestCommand,"GET",strlen("GET")))==0){
 								
@@ -1043,7 +1057,7 @@ void putDFSFile(){
 	char data[MAXPACKSIZE];
 	int temp;
 	ssize_t  file_bytes;
-	char ACK_packet[MAXACKSIZE];
+	char ACK_packet[MAXCOLSIZE];
 
 		
 	DEBUG_PRINT("Put DFS File");
@@ -1103,9 +1117,24 @@ void putDFSFile(){
 			}	
 		}	
 
-		sendDataToDFS(datatoserver);//send data to 				
-
+		sendDataToDFS(datatoserver);//send data to 		
 		DEBUG_PRINT("Sending 1st and 2nd File to %s part %d",config.DFSName[datatoserver.DFServerId],partdest1[datatoserver.DFServerId],partdest2[datatoserver.DFServerId]);
+		if(nbytes = recv(sock[datatoserver.DFServerId],ACK_packet,sizeof(ACK_packet),0)>0)	{	
+			DEBUG_PRINT("\nACK Packet%s\n",ACK_packet );
+			if(!strcmp(ACK_packet,"OK")){
+				passCred =CRED_PASS;
+			}
+			else if (!strncmp(ACK_packet,"Invalid",strlen("Invalid"))){
+				passCred =CRED_FAIL;	
+				printf("%s\n",ACK_packet );
+			}
+			else
+			{
+				passCred =CRED_ERROR;		
+				printf("%s\n",ACK_packet );
+			}	
+		}	
+		
 		/*
 		
 				//sleep(1);
@@ -1449,6 +1478,7 @@ int CheckSever(){
 
 }
 
+
 		
 int main (int argc, char * argv[] ){
     int i=0,c=0,l=0;
@@ -1465,6 +1495,7 @@ int main (int argc, char * argv[] ){
 	char MD5filelast[MAXDFSCOUNT];
 	int MD5length=0;
 	MD5file = MD5_temp;
+	passCred=CRED_FAIL;
 	
 	//Input of filename for config 
 	if (argc != 2){
@@ -1745,13 +1776,9 @@ int main (int argc, char * argv[] ){
 					DEBUG_PRINT("Command %s => ",action[command_location]);
 	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
 	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
-					
-					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
-						//send command
-						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
-						//sendcommandToDFS(requesttoserver);
-						//sendtoServer(command,strlen(command),NOACK);//send command to server
-						//sendCommand();				
+				if(passCred==CRED_PASS){		
+					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){			
+
 						if(listMainRcv()<0){
 							DEBUG_PRINT("NO Files found");
 						}
@@ -1766,33 +1793,14 @@ int main (int argc, char * argv[] ){
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");
 							DEBUG_PRINT("File Name %s",action[file_location]);
-							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							//strcpy(requesttoserver.DFCRequestCommand,"GET");
-							//sendcommandToDFS(requesttoserver);
-
-								//if(rcvFile(action[file_location]) <0){	
-								//	DEBUG_PRINT("Error in get!!!\n");
-									
-								//} v
 						
 			  		}
 
 					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
 							DEBUG_PRINT("Inside PUT");
-							DEBUG_PRINT("File Name %s",action[file_location]);
-
-							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							//strcpy(requesttoserver.DFCRequestCommand,"PUT");
-							//sendcommandToDFS(requesttoserver);
-
-								//if(rcvFile(action[file_location]) <0){	
-								//	DEBUG_PRINT("Error in get!!!\n");
-									
-								//} v
-						
+							DEBUG_PRINT("File Name %s",action[file_location]);						
 			  		}
+			}  	
 
 			DEBUG_PRINT("Deallocate memory for command\n");
 			//Free the command allocated 

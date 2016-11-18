@@ -752,6 +752,52 @@ void *client_connections(void *client_sock_id){
 
 char (*action)[MAXCOLSIZE];
 
+enum ERR_STATE {CRED_ERROR,CRED_FAIL,CRED_PASS};
+
+int credCheck(){
+
+	int passCred=CRED_ERROR;//Inital Value 
+	int userid=-1,i=0;//location for user 
+
+	//Check the list from config if user is available according data from Client
+	while(i<maxtypesupported){//check the values within max supported 
+		if(!(strcmp(datafromClient.DFCRequestUser,config.DFCUsername[i]))) {//check username one by one 
+			userid=i;
+			DEBUG_PRINT("Found Username @%d",userid);
+			break;
+		}
+		else
+		{
+			DEBUG_PRINT("Username Not Found @%d",i++);
+		}
+	
+	}
+
+	if(userid>=0){//check if username location found
+		if(!(strcmp(datafromClient.DFCRequestPass,config.DFCPassword[userid]))){
+			passCred = CRED_PASS;				//user and password both matched 
+			DEBUG_PRINT("Password  Macthed");
+		}
+		else
+		{
+			passCred = CRED_FAIL;					//user name matched , nut password didnt match 
+			DEBUG_PRINT("Password NOt Macthed");
+		}	
+	}
+	else{
+		passCred = CRED_FAIL;			//Didnt find the user 
+		DEBUG_PRINT("Didnt FInd User");
+	}
+
+	return passCred;
+
+}
+
+
+
+
+
+
 void *client_connections(void *client_sock_id)
 //void client_connections (int client_sock_id)
 {
@@ -824,8 +870,20 @@ void *client_connections(void *client_sock_id)
 						//strncpy(directory,packet[DFCUserloc]);
 
 						//Check for Credentials
-						
-						list(directory,thread_sock);
+						if(credCheck()==CRED_PASS){
+							DEBUG_PRINT("Send to LIST fundtion");
+							list(directory,thread_sock);
+
+						}
+						else							
+						{
+							DEBUG_PRINT("Send to Invalid Erro");
+							if((send(thread_sock,"Invalid Username/Password.Please try Again",strlen("Invalid Username/Password.Please try Again"),0))<0)		
+							{
+								fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+							}
+	
+						}	
 										
 					}
 					else if ((strncmp(datafromClient.DFCRequestCommand,"GET",strlen("GET")))==0){
@@ -847,120 +905,34 @@ void *client_connections(void *client_sock_id)
 					else if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
 							DEBUG_PRINT("Inside PUT 1st time");
 							DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
-							rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData);//Recieve the part files 		
-							rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2);
-							//DEBUG_PRINT("Sending ACK");
-							//send(thread_sock,"ACK",strlen("ACK"),0);
-
-							//bzero(message_client_file2,sizeof(message_client_file2));
-							//read_bytes=0;
-							//DEBUG_PRINT("Wating for 2nd file..");
-							/*
-							nbytes=0;
-							do{
-									nbytes = recv(thread_sock,message_client_file2,sizeof(message_client_file2),0);
-									DEBUG_PRINT("nbytes %d",(int)nbytes);
-										nbytes = strlen(message_client_file2);
-										DEBUG_PRINT("Message from Client 2",message_client_file2);
-										//
-										bzero(packet[DFCUserloc],sizeof(packet[DFCUserloc]));
-										bzero(packet[DFCPassloc],sizeof(packet[DFCPassloc]));
-										bzero(packet[DFCCommandloc],sizeof(packet[DFCCommandloc]));
-										bzero(packet[DFCFileloc],sizeof(packet[DFCFileloc]));
-										bzero(packet[DFCDataloc],sizeof(packet[DFCDataloc]));
-										if(nbytes>0){
-											if ((strlen(message_client_file2)>0) && (message_client_file2[strlen(message_client_file2)-1]=='\n')){
-												message_client_file2[strlen(message_client_file2)-1]='\0';
-											}	
-											if((total_attr_commands=splitString(message_client_file2,"/",packet,7)>0)){
-												//copy contents to data structure of data struture 
-												strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
-												strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
-												strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
-												strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
-												strcpy(datafromClient.DFCData,packet[DFCDataloc]);
-
-								   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
-								   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
-								   				DEBUG_PRINT("Command %s",datafromClient.DFCRequestCommand);
-								   				DEBUG_PRINT("File %s",datafromClient.DFCRequestFile);
-								   				//DEBUG_PRINT("Data %s ",datafromClient.DFCData);
-
-												if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
-													DEBUG_PRINT("Inside PUT 2nd time");
-													DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
-													rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
-													DEBUG_PRINT("Sending for file 2 ACK");
-													send(thread_sock,"ACK",strlen("ACK"),0);
-
-													break;
-												}		
-
-								   			}
-								   			else
-								   			{
-								   				printf("Cant Split the command \n");
-								   			}	
-										}
-										//sleep(1);
-										
-										
-							}//while(nbytes = recv(sock[datatoserver.DFServerId],message_client,sizeof(message_client),0)>0);		
-							while(nbytes <=0);		
-							*/
-							//thread_sock
-							/*
-							while((read_bytes =recv(thread_sock,message_client,strlen(message_client),0))<0){
-								
-							
-								DEBUG_PRINT("Read Bytes %d",read_bytes);	
-								//printf("request from client %s\n",message_client );
-								strcpy(message_bkp,message_client);//backup of orginal message 
-								DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
-								DEBUG_PRINT("Message from Client => %s \n",message_client );
-
-								if ((strlen(message_client)>0) && (message_client[strlen(message_client)-1]=='\n')){
-										message_client[strlen(message_client)-1]='\0';
-								}
-
-								//
-								if((total_attr_commands=splitString(message_client,"/",packet,7)>0))
+							if(credCheck()==CRED_PASS){
+								DEBUG_PRINT("receive Files");
+								rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData);//Recieve the part files 		
+								rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2);	
+								if((send(thread_sock,"OK",strlen("OK"),0))<0)		
 								{
-									//copy contents to data structure of data struture 
-									strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
-									strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
-									strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
-									strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
-									strcpy(datafromClient.DFCData,packet[DFCDataloc]);
-
-					   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
-					   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
-					   				DEBUG_PRINT("Command %s",datafromClient.DFCRequestCommand);
-					   				DEBUG_PRINT("File %s",datafromClient.DFCRequestFile);
-					   				//DEBUG_PRINT("Data %s ",datafromClient.DFCData);
-
-									if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
-										DEBUG_PRINT("Inside PUT 2nd time");
-										DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
-										rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
-										//break;
-									}		
-
-					   			}
-					   			else
-					   			{
-					   				printf("Cant Split the command \n");
-					   			}	
-								
-					   			//rcvFile(datafromClient.DFCRequestFile);//Recieve the part files 		
-
-					   		}
-					   		*/
-					   		
+									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								}
+							}
+							else							
+							{
+								DEBUG_PRINT("Username and Password Didnt match,send error");
+								if((write(thread_sock,"Invalid Username/Password.Please try Again",strlen("Invalid Username/Password.Please try Again")))<0)		
+								{
+									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								}
+		
+							}	
+												   		
 			  		}
 			  		else
 			  		{
 			  			printf("Incorrect Command  \n");
+		  				if((send(thread_sock,"Incorrect Command",strlen("Incorrect Command"),0))<0)		
+						{
+							fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+						}
+
 
 
 			  		}	
