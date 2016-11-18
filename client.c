@@ -62,7 +62,7 @@ File for implementation of a Distrubuted File Client and Server
 
 
 
-//#define DEBUGLEVEL
+#define DEBUGLEVEL
 
 #ifdef DEBUGLEVEL
 	#define DEBUG 1
@@ -1461,7 +1461,7 @@ int listMainRcv()
 					DEBUG_PRINT("incomplete");
 				}
 				//DEBUG_PRINT("%s",display_list[j]);
-				DEBUG_PRINT("\n%s\n",display_list[j] );
+				printf("\n%s\n",display_list[j] );
 				j++;
 	}
 	if(filename_temp){
