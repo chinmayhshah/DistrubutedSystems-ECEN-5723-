@@ -549,7 +549,9 @@ int list(char * directory,int listsock){
 	}
 	
 	//sendtoClient(listtosend,(ssize_t)sizeof(listtosend));
-	free(listtosend);
+	if(listtosend){
+		free(listtosend);
+	}	
 	return 0;//sucess 	
 }
 

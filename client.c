@@ -2,9 +2,9 @@
 Base Code : Provided by Prof 
 Author :Chinmay Shah 
 File :dfsclient.c
-Last Edit : 11/1
+Last Edit : 11/17
 
-File for implementation of a Distrubuted File Client 
+File for implementation of a Distrubuted File Client and Server 
 ******************************************************************************/
 
 #include <sys/socket.h>
@@ -44,6 +44,7 @@ File for implementation of a Distrubuted File Client
 #define SERV_PORT 3000
 
 #define MAXCOLSIZE 100
+#define MAXLISTSIZE MAXCOLSIZE*5
 #define MAXFILESCOUNT 1000
 #define HTTPREQ 	30
 
@@ -54,6 +55,7 @@ File for implementation of a Distrubuted File Client
 #define MAXCOMMANDSIZE 100
 #define MAXCONTENTSUPPORT 15
 
+#define MAXFILESIZE 50000
 #define MAXACKSIZE 10
 
 
@@ -114,7 +116,7 @@ struct sockaddr_in server[MAXDFSCOUNT];
 int total_attr_commands;
 //type2D *action;//for splitting commands 
 char (*action)[MAXCOLSIZE];
-char list[MAXFILESCOUNT][MAXCOLSIZE];// To store list common between all threads
+char list[MAXFILESCOUNT][MAXLISTSIZE];// To store list common between all threads
 int list_count=0;
 int resource_mutex=1;
 // Default split of parts 	 //array     0 1 2 3
@@ -665,7 +667,7 @@ int MD5Cal(char *filename, char *MD5_result)
 }
 
 
-#define MAXFILESIZE 50000
+
 
 
 /*************************************************************************************
@@ -1166,46 +1168,21 @@ void putDFSFile(){
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 // A list recv function for main 
 // after all threads have received the 
-void listMainRcv()
+int listMainRcv()
 {
-	char list_temp[MAXFILESCOUNT][MAXCOLSIZE];
+	char list_temp[MAXFILESCOUNT][MAXLISTSIZE];
 	int i=0,j=0,k=0,l=0,a=0,f=0,total_files_rxcv,temp_locn,total_disp_files=0; 
-	char file_ext[MAXCOLSIZE];
-	char filename[MAXFILESCOUNT][MAXCOLSIZE];
-	char partfilename[MAXFILESCOUNT][MAXCOLSIZE];
-	char display_list[MAXFILESCOUNT][MAXCOLSIZE];
-	char *lastptr=NULL;
+	char file_ext[MAXACKSIZE];
+	char filename[MAXFILESCOUNT][MAXLISTSIZE];
+	char partfilename[MAXFILESCOUNT][MAXLISTSIZE];
+	char display_list[MAXFILESCOUNT][MAXLISTSIZE];
+	char lastTemp[10];
+	char *lastptr=&lastTemp;
 	char *filename_temp=NULL;
-	DEBUG_PRINT("Complete List RCVD");						
+	DEBUG_PRINT("Complete List RCVD");	
+	int nofiles=0;					
 	int duplicate_flag=0,final_list=0, partflags[MAXFILESCOUNT][MAXDFSCOUNT];
 
 
@@ -1216,21 +1193,34 @@ void listMainRcv()
 		bzero(partfilename[i],strlen(partfilename[i]));
 		bzero(display_list[i],strlen(display_list[i]));
 		bzero(filename[i],strlen(filename[i]));
-		//bzero(list_temp[i],strlen(list_temp[i]));
+		bzero(list_temp[i],strlen(list_temp[i]));
 	}
 
 	for (i=0;i<MAXDFSCOUNT;i++){	
 		DEBUG_PRINT(" %s",list[i]);
-	}
 
+		if(strlen(list[i])>2)
+		{	
+			DEBUG_PRINT("Lenght %d",strlen(list[i]));
+			nofiles++;//check if list is enpty or not 
+		}
+	}
+	DEBUG_PRINT("Check count %d",nofiles);
 	//for presentation purposes five files 
 	i=0;
 	j=0;
 	l=0;
 	k=0;
 	DEBUG_PRINT("Split files from differet serveres");				
-		
+	
+	if(!nofiles){
+		printf("NO files on DFS\n");
+		return -1;
+
+	}
+	DEBUG_PRINT("Split files ");				
 	while(i < MAXDFSCOUNT){						
+
 		if (list[i][j] == ' '){			
 			list_temp[k][j]='\0';					
 			if (list[i][j+1] == '#'){
@@ -1250,8 +1240,9 @@ void listMainRcv()
 			j++;
 			l++;
 		}		
-		
+		//DEBUG_PRINT("Check for split %d",i);
 	}	
+
 	
 	total_files_rxcv =k;
 	DEBUG_PRINT("total files separated %d",total_files_rxcv);	
@@ -1260,7 +1251,7 @@ void listMainRcv()
 	j=i=k=0;
 	DEBUG_PRINT("Display list %d",total_files_rxcv);	
 	for (k=0;k<total_files_rxcv;k++){
-		DEBUG_PRINT("%s",list_temp[k]);	
+		DEBUG_PRINT("%s",&list_temp[k][1]);	
 	}
 
 
@@ -1270,14 +1261,14 @@ void listMainRcv()
 	DEBUG_PRINT("temp var values %d  %d %d",i,j,k);	
 	while(j<total_files_rxcv)
 	{
-				if ((filename_temp=(char*)malloc(sizeof(char)*MAXCOLSIZE))<0)
+				if ((filename_temp=(char*)malloc(sizeof(char)*MAXLISTSIZE))<0)
 				{
 					DEBUG_PRINT("Cant Allocate space\n");
 					break;
 				}
-
-				strncpy(filename_temp,list_temp[j],strlen(list_temp[j]));
-				filename_temp[strlen(list_temp[j])]='\0';
+				bzero(filename_temp,sizeof(filename_temp));
+				strncpy(filename_temp,&list_temp[j][1],strlen(list_temp[j]));
+				//filename_temp[strlen(&list_temp[j][1])]='\0';
 				DEBUG_PRINT	("File temp %s \n",filename_temp);
 				
 
@@ -1289,7 +1280,7 @@ void listMainRcv()
 					strcpy(file_ext,lastptr);
 					DEBUG_PRINT("Extension %s",file_ext);
 					temp_locn=strlen(filename_temp)- strlen(file_ext) -1;
-					
+					bzero(filename[f],sizeof(filename[f]));
 					strncpy( filename[f], filename_temp,temp_locn);
 					filename[f][temp_locn+1] = '\0';
 					//check for duplicaates of same file and keep only unique file names 
@@ -1309,7 +1300,7 @@ void listMainRcv()
 
 							f++;// update if not duplicate 
 							DEBUG_PRINT("update f");
-
+							DEBUG_PRINT("Extracted file %d=>%s",f-1,filename[f-1]);
 						}
 					
 					//update the part flag which has been rcvd	
@@ -1318,7 +1309,7 @@ void listMainRcv()
 					//partflags[f-1][temp_locn]=1;
 					//DEBUG_PRINT("part flag updated %d=> %d => %x , f=>%d",temp_locn,partflags[f-1][temp_locn],temp_locn,f-1);
 						
-					DEBUG_PRINT("Extracted file %d=>%s",f-1,filename[f-1]);
+					
 					
 				}
 				else
@@ -1357,6 +1348,7 @@ void listMainRcv()
 					DEBUG_PRINT("Extension %s",file_ext);
 					temp_locn=strlen(filename_temp)- strlen(file_ext) -1;
 					
+					bzero(partfilename[f],sizeof(partfilename[f]));
 					strncpy( partfilename[f], filename_temp,temp_locn);
 					partfilename[f][temp_locn+1] = '\0';
 					//check for duplicaates of same file and keep only unique file names 
@@ -1385,9 +1377,9 @@ void listMainRcv()
 					//check which file name matches 
 					for(k=0;k<total_disp_files;k++){
 						DEBUG_PRINT("File =>%s , Orginal File=> %s ",partfilename[f],filename[k]);
-						if (!(strncmp(partfilename[f],filename[k],strlen(partfilename[f])))){
+						if (!(strncmp(&partfilename[f][1],filename[k],strlen(&partfilename[f][1])))){
 							partflags[k][temp_locn]=1;
-							DEBUG_PRINT("File %s part flag updated %d=> %d => %x , f=>%d",partfilename[f],temp_locn,partflags[k][temp_locn],temp_locn,k);
+							DEBUG_PRINT("File %s part flag updated %d=> %d => %x , f=>%d",&partfilename[f][1],temp_locn,partflags[k][temp_locn],temp_locn,k);
 							break;
 
 						}else
@@ -1404,7 +1396,8 @@ void listMainRcv()
 					DEBUG_PRINT("Could not find '.' ");
 					//return -1;
 				}
-		j++;		
+		j++;
+
 	}
 
 
@@ -1442,8 +1435,17 @@ void listMainRcv()
 				DEBUG_PRINT("\n%s\n",display_list[j] );
 				j++;
 	}
+	if(filename_temp){
+		free(filename_temp);
+	}	
+	DEBUG_PRINT("Return to main" );
+	return 0;
 
-	free(filename_temp);
+
+}
+
+
+int CheckSever(){
 
 }
 
@@ -1542,7 +1544,7 @@ int main (int argc, char * argv[] ){
 		
 	while(1)
 	{//start of while 
-
+			DEBUG_PRINT("Start oF Main");
 			//Clear the command and request to Client 
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
 			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
@@ -1607,7 +1609,7 @@ int main (int argc, char * argv[] ){
 	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
 					
 					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
-								printf("Inside LIST");
+								DEBUG_PRINT("Inside LIST");
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");
@@ -1740,7 +1742,7 @@ int main (int argc, char * argv[] ){
 
 
 
-					DEBUG_PRINT("Command %s => length %d",action[command_location]);
+					DEBUG_PRINT("Command %s => ",action[command_location]);
 	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
 	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
 					
@@ -1750,7 +1752,15 @@ int main (int argc, char * argv[] ){
 						//sendcommandToDFS(requesttoserver);
 						//sendtoServer(command,strlen(command),NOACK);//send command to server
 						//sendCommand();				
-						listMainRcv();	
+						if(listMainRcv()<0){
+							DEBUG_PRINT("NO Files found");
+						}
+						else
+						{
+							DEBUG_PRINT("Complete LIST ");	
+						}	
+						
+
 						
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
@@ -1793,6 +1803,7 @@ int main (int argc, char * argv[] ){
 				}
 				free(action);//clear  the request recieved 
 			}
+			DEBUG_PRINT("Deallocate action\n");
 
 			
 		
