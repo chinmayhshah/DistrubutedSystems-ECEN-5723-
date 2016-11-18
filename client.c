@@ -130,6 +130,7 @@ int partdest2[MAXDFSCOUNT];
 //Input is the thread id(i) - maps to the DFSIP and DFSPORT 
 
 enum ERR_STATE {CRED_ERROR,CRED_FAIL,CRED_PASS};
+enum FILE_STATE {FILE_NOTFOUND,FILE_FOUND,FILE_NOTOPEN};
 
 int passCred=CRED_FAIL;
 
@@ -1478,6 +1479,16 @@ int CheckSever(){
 
 }
 
+int FilePresent(char fname){
+       if( access( fname, F_OK ) != -1 ) {
+       		//FILE exists
+       		DEBUG_PRINT("File is present %s",fname);
+           return FILE_FOUND ;
+       } else {
+       		DEBUG_PRINT("File not present %s",fname);
+           return FILE_NOTFOUND ;
+       }
+}
 
 		
 int main (int argc, char * argv[] ){
@@ -1497,6 +1508,8 @@ int main (int argc, char * argv[] ){
 	MD5file = MD5_temp;
 	passCred=CRED_FAIL;
 	
+    int commandFilter=0,fileCheck=0;
+
 	//Input of filename for config 
 	if (argc != 2){
 		printf ("USAGE:  <Conf File>\n");
@@ -1738,85 +1751,93 @@ int main (int argc, char * argv[] ){
 			  		}
 			  		else
 			  		{	
+			  			commandFilter=1;
 			  			DEBUG_PRINT("Input in correct \n");
 
 			  		}	
 
 
 			 DEBUG_PRINT("last Command %s File%s\n",action[command_location],action[file_location]); 		
-			  					//*** change logic , should not create the threads if command invalid *****
-			//Create the thread for all the communication with DFS Servers
-			for (c=0;c<MAXDFSCOUNT;c++ ){
-				//DEBUG_PRINT("DFS Thread %d",i);
-				if ((pthread_create(&DFSThread[c],NULL,DFSThreadServed,(void *)c))<0){
-					//close(server_sock);
-					perror("Thread not created");
-					exit(-1);
+			 
 
-				}	
-			
-			}
-			//Waiting for Join of all threads
-			for (c=0;c<MAXDFSCOUNT;c++){
-				if(pthread_join(DFSThread[c], NULL) == 0)
-				 {
-				  DEBUG_PRINT("Thread %d completed\n",c);
-				 }	
-				 else
-				 {
-				   perror(" Thread Join");
-				 }
-			}
-			DEBUG_PRINT("Thread join Completed \n");
+			if(!commandFilter){
+				//Create the thread for all the communication with DFS Servers
+				for (c=0;c<MAXDFSCOUNT;c++ ){
+					//DEBUG_PRINT("DFS Thread %d",i);
+					if ((pthread_create(&DFSThread[c],NULL,DFSThreadServed,(void *)c))<0){
+						//close(server_sock);
+						perror("Thread not created");
+						exit(-1);
 
-
-
-
-
-					DEBUG_PRINT("Command %s => ",action[command_location]);
-	   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
-	   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
-				if(passCred==CRED_PASS){		
-					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){			
-
-						if(listMainRcv()<0){
-							DEBUG_PRINT("NO Files found");
-						}
-						else
-						{
-							DEBUG_PRINT("Complete LIST ");	
-						}	
-						
-
-						
-					}
-					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
-							DEBUG_PRINT("Inside GET");
-							DEBUG_PRINT("File Name %s",action[file_location]);
-						
-			  		}
-
-					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
-							DEBUG_PRINT("Inside PUT");
-							DEBUG_PRINT("File Name %s",action[file_location]);						
-			  		}
-			}  	
-
-			DEBUG_PRINT("Deallocate memory for command\n");
-			//Free the command allocated 
-			if (action!=NULL){
-				//free alloaction of memory 
-				for(i=0;i<total_attr_commands;i++){
-					free((*action)[i]);
+					}	
+				
 				}
-				free(action);//clear  the request recieved 
-			}
-			DEBUG_PRINT("Deallocate action\n");
+				//Waiting for Join of all threads
+				for (c=0;c<MAXDFSCOUNT;c++){
+					if(pthread_join(DFSThread[c], NULL) == 0)
+					 {
+					  DEBUG_PRINT("Thread %d completed\n",c);
+					 }	
+					 else
+					 {
+					   perror(" Thread Join");
+					 }
+				}
+				DEBUG_PRINT("Thread join Completed \n");
 
-			
+
+
+
+
+						DEBUG_PRINT("Command %s => ",action[command_location]);
+		   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
+		   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
+					if(passCred==CRED_PASS){		
+						if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){			
+
+							if(listMainRcv()<0){
+								DEBUG_PRINT("NO Files found");
+							}
+							else
+							{
+								DEBUG_PRINT("Complete LIST ");	
+							}	
+							
+
+							
+						}
+						else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
+								DEBUG_PRINT("Inside GET");
+								DEBUG_PRINT("File Name %s",action[file_location]);
+							
+				  		}
+
+						else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
+								DEBUG_PRINT("Inside PUT");
+								DEBUG_PRINT("File Name %s",action[file_location]);						
+				  		}
+				}  	
+
+				DEBUG_PRINT("Deallocate memory for command\n");
+				DEBUG_PRINT("Deallocate action\n");
+		}
+		else
+		{
+            printf("Input Command incorrect.Please try again \n");
+            commandFilter=0;
+		}		
+		//Free the command allocated 
+		if (action!=NULL){
+			//free alloaction of memory 
+			for(i=0;i<total_attr_commands;i++){
+				free((*action)[i]);
+			}
+			free(action);//clear  the request recieved 
+		}
 		
+			
 	}//While end
-	
+		
 	return 0;
 
 	
