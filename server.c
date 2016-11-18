@@ -496,6 +496,7 @@ int list(char * directory,int listsock){
 	char  * listtosend=NULL ;
 	//open directory 
 	DEBUG_PRINT("In LIST => directory %s",directory);
+
 	d = opendir (directory);
 	if (!d){
 		fprintf(stderr,"Error in opening directory %s\n",strerror(errno));
@@ -821,12 +822,11 @@ void *client_connections(void *client_sock_id)
 						strcat(directory,"/");
 						DEBUG_PRINT("directory : %s",directory);
 						//strncpy(directory,packet[DFCUserloc]);
+
+						//Check for Credentials
+						
 						list(directory,thread_sock);
-						//strcpy(requesttoserver.DFCRequestCommand,"LIST");
-						//sendcommandToDFS(requesttoserver);
-						//sendtoServer(command,strlen(command),NOACK);//send command to server
-						//sendCommand();				
-						//listRcv();								
+										
 					}
 					else if ((strncmp(datafromClient.DFCRequestCommand,"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");

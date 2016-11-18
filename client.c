@@ -937,11 +937,11 @@ void *DFSThreadServed(void *Id){
 
 
 			if (connect_sucess){	    
-					printf("connected SOCKet %d",sock[DFSId]);
+					DEBUG_PRINT("connected SOCKet %d",sock[DFSId]);
 					//copy socket 
 					requesttoserver.socket=datatoserver.socket=sock[DFSId];//assigning only server one socket for now
 					requesttoserver.DFServerId=datatoserver.DFServerId=DFSId;
-					printf("Command %s File%s\n",action[command_location],action[file_location]);
+					DEBUG_PRINT("Command %s File%s\n",action[command_location],action[file_location]);
 					//compare the input command and perform necessary action inside thread  		
 					if ((strncmp(requesttoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)){
 						//send command
