@@ -25,6 +25,8 @@ Last Edit : 9/25
 #include <pthread.h> // For threading , require change in Makefile -lpthread
 //#include <time.h>
 #include <glob.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 //#include <time.h>
 #define MAXCOMMANDSIZE 100
@@ -485,6 +487,8 @@ void exitServer(){
 }
 
 
+
+
 /*************************************************************
 List the files on local directory of user and send all file parts 
 details to server 
@@ -492,6 +496,7 @@ details to server
 o/p : list of files in present directory posted to client 
 
 Ref:http://www.lemoda.net/c/list-directory/
+http://man7.org/linux/man-pages/man3/readdir.3.html
 **************************************************************/
 
 int list(char * directory,int listsock){
@@ -527,8 +532,9 @@ int list(char * directory,int listsock){
 			break;
 		}
 		
-		if(!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0)){//excluding present and previous dir
-			DEBUG_PRINT("File %s",listfiles->d_name);
+		//if((!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0))&& is_regular_file(listfiles->d_name)){//excluding present and previous dir
+		if((!(strcmp(listfiles->d_name,".") == 0 || strcmp(listfiles->d_name,"..") ==0))&& listfiles->d_type==DT_REG){//excluding present and previous dir	
+			DEBUG_PRINT("File %s => if file %d ",listfiles->d_name,listfiles->d_type==DT_REG);
 			strcat(listtosend,listfiles->d_name);
 			strcat(listtosend," ");
 			
@@ -608,15 +614,6 @@ int rcvFile (char *filename,char *dataInput,char *folder){
 		sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
 		DEBUG_PRINT("Search in working dir: %s\n", cwd);
     }		
-
-
-
-
-
-
-
-
-
 
     DEBUG_PRINT("Change working dir: %s\n", cwd);
     //new change
@@ -1010,7 +1007,7 @@ void *client_connections(void *client_sock_id)
 						strcat(directory,"/");
 						strncat(directory,packet[DFCUserloc],strlen(packet[DFCUserloc]));
 						strcat(directory,"/");
-						DEBUG_PRINT("directory : %s",directory);
+						
 						//strncpy(directory,packet[DFCUserloc]);
 
 						//Check for Credentials
@@ -1018,6 +1015,16 @@ void *client_connections(void *client_sock_id)
 							DEBUG_PRINT("Send to LIST fundtion");
 							strcpy(datafromClient.DFCRequestFolder,packet[DFCDataloc]);
 	   						DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
+							if(strlen(datafromClient.DFCRequestFolder)>0){
+								strncat(directory,datafromClient.DFCRequestFolder,strlen(datafromClient.DFCRequestFolder));
+								strcat(directory,"/");
+								DEBUG_PRINT("with sub folder %s\n", directory);
+							}
+							else
+							{	
+								
+								DEBUG_PRINT("NO change for sub folder directory : %s",directory);
+							}	
 							list(directory,thread_sock);
 
 						}
@@ -1081,11 +1088,22 @@ void *client_connections(void *client_sock_id)
 		   							DEBUG_PRINT("No SubFolder %s ",datafromClient.DFCRequestFolder);	
 		   						}	
 								rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData,datafromClient.DFCRequestFolder);//Recieve the part files 		
-								rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2,datafromClient.DFCRequestFolder);	
-								if((send(thread_sock,"OK",strlen("OK"),0))<0)		
-								{
-									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								if(rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2,datafromClient.DFCRequestFolder)>0){	
+									if((send(thread_sock,"OK",strlen("OK"),0))<0)		
+									{
+										fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+									}
 								}
+								else							
+								{
+									DEBUG_PRINT("SubFolder or Location not presnet ");
+									if((write(thread_sock,"Invalid File or subfolder not present",strlen("Invalid Filer or subfolde not present")))<0)		
+									{
+										fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+									}
+			
+								}
+									
 							}
 							else							
 							{
@@ -1113,7 +1131,12 @@ void *client_connections(void *client_sock_id)
 						//Check for Credentials
 						if(credCheck()==CRED_PASS){
 							DEBUG_PRINT("Create Directory %s",datafromClient.DFCRequestFolder);
-							createDirectory(datafromClient.DFCRequestFolder);
+							if (createDirectory(datafromClient.DFCRequestFolder)<0){
+								if((send(thread_sock,"Invalid Can't Create Sub Folder",strlen("Invalid Can't Create Sub Folder"),0))<0)		
+								{
+									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								}
+							}
 
 						}
 						else							

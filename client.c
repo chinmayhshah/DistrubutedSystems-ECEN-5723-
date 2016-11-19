@@ -918,43 +918,56 @@ void rcvDFSFile(int socketID){
 		//DEBUG_PRINT("Check DFS=> %s \n",config.DFSdirectory );
 		DEBUG_PRINT("Message from Client => %s \n",message_server );
 
+
 		if ((strlen(message_server)>0) && (message_server[strlen(message_server)-1]=='\n')){
 				message_server[strlen(message_server)-1]='\0';
 		}
+		//check if error message 
+		if (!strncmp(message_server,"Invalid",strlen("Invalid")))
+		{
+			printf("\n%s\n",message_server);
+			passCred=CRED_FAIL;
+		}
+		else{								
+			DEBUG_PRINT("NO error message");
+			passCred==CRED_PASS;
+		}
 
-		//
-		if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
-			total_attr_commands=0;
+		if (passCred==CRED_PASS){
+
+			//
+			if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
+				total_attr_commands=0;
 
 
-			if((total_attr_commands=splitString(message_server,"|",packet,9)>0)){
+				if((total_attr_commands=splitString(message_server,"|",packet,9)>0)){
+						
+						
+						//copy contents to data structure of data struture 
+						strcpy(datafromServer.DFCRequestUser,packet[DFCUserloc]);
+						strcpy(datafromServer.DFCRequestPass,packet[DFCPassloc]);
+						strcpy(datafromServer.DFCRequestCommand,packet[DFCCommandloc]);
+						strcpy(datafromServer.DFCRequestFile,packet[DFCFileloc]);
+						memcpy(datafromServer.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
+						strcpy(datafromServer.DFCRequestFile2,packet[DFCFile2loc]);
+						memcpy(datafromServer.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
+
+		   				DEBUG_PRINT("User %s ",datafromServer.DFCRequestUser);
+		   				DEBUG_PRINT("Password %s",datafromServer.DFCRequestPass);
+		   				DEBUG_PRINT("Command %s",datafromServer.DFCRequestCommand);
+		   				DEBUG_PRINT("File 1 %s",datafromServer.DFCRequestFile);
+		   				DEBUG_PRINT("Data 1 %s ",datafromServer.DFCData);
+		   				DEBUG_PRINT("File 2 %s",datafromServer.DFCRequestFile2);	   				
+		   				DEBUG_PRINT("Data 2 %s ",datafromServer.DFCData2);
+		   				
+		   				DEBUG_PRINT("Total Commands %d",total_attr_commands);
 					
-					
-					//copy contents to data structure of data struture 
-					strcpy(datafromServer.DFCRequestUser,packet[DFCUserloc]);
-					strcpy(datafromServer.DFCRequestPass,packet[DFCPassloc]);
-					strcpy(datafromServer.DFCRequestCommand,packet[DFCCommandloc]);
-					strcpy(datafromServer.DFCRequestFile,packet[DFCFileloc]);
-					memcpy(datafromServer.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
-					strcpy(datafromServer.DFCRequestFile2,packet[DFCFile2loc]);
-					memcpy(datafromServer.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
+				}
+				writeFile(datafromServer.DFCRequestFile,datafromServer.DFCData);
+				writeFile(datafromServer.DFCRequestFile2,datafromServer.DFCData2);		
 
-	   				DEBUG_PRINT("User %s ",datafromServer.DFCRequestUser);
-	   				DEBUG_PRINT("Password %s",datafromServer.DFCRequestPass);
-	   				DEBUG_PRINT("Command %s",datafromServer.DFCRequestCommand);
-	   				DEBUG_PRINT("File 1 %s",datafromServer.DFCRequestFile);
-	   				DEBUG_PRINT("Data 1 %s ",datafromServer.DFCData);
-	   				DEBUG_PRINT("File 2 %s",datafromServer.DFCRequestFile2);	   				
-	   				DEBUG_PRINT("Data 2 %s ",datafromServer.DFCData2);
-	   				
-	   				DEBUG_PRINT("Total Commands %d",total_attr_commands);
-				
-			}
-			writeFile(datafromServer.DFCRequestFile,datafromServer.DFCData);
-			writeFile(datafromServer.DFCRequestFile2,datafromServer.DFCData2);		
-
+			}	
 		}	
-
 
 	}
 	//Free the command allocated 
@@ -1009,7 +1022,7 @@ void *DFSThreadServed(void *Id){
 			//MD5 Cal
 			char * MD5file;
 			char MD5_temp[MD5_DIGEST_LENGTH*2];
-			
+			char ACK_packet[MAXCOLSIZE];
 			
 			MD5file = MD5_temp;
 			
@@ -1103,7 +1116,7 @@ void *DFSThreadServed(void *Id){
 						DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);						
 						sendcommandToDFS(requesttoserver);							
 						rcvDFSFile(sock[DFSId]);
-						passCred=CRED_PASS;//check if 
+						//passCred=CRED_PASS;//check if 
 				  	}
 				  	else if ((strncmp(requesttoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
 								
@@ -1115,7 +1128,28 @@ void *DFSThreadServed(void *Id){
 					{
 
 						DEBUG_PRINT("Inside Thread %d MKDIR",(int)DFSId);								
-						sendcommandToDFS(requesttoserver);		
+						sendcommandToDFS(requesttoserver);	
+						DEBUG_PRINT("Waiting for List");
+						bzero(list[list_count],sizeof(list[list_count]));
+						if(nbytes = recv(sock[DFSId],ACK_packet,sizeof(ACK_packet),0)<0){//recv from server and check for non-blocking 
+							fprintf(stderr,"non-blocking socket not returning data  List %s\n",strerror(errno) );
+						}
+						
+						DEBUG_PRINT("\n%s\n",list[list_count] );
+						if (!strncmp(ACK_packet,"Invalid",strlen("Invalid")))
+						{
+							printf("\n%s\n",ACK_packet );
+							//passCred=CRED_FAIL;
+						}
+						else{								
+							//DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
+							printf("Directory Create successfully\n");
+							//passCred=CRED_PASS;
+							//list_count++;
+						}						
+
+
+
 					}
 					else
 					{
@@ -1311,10 +1345,12 @@ int listMainRcv()
 	char lastTemp[10];
 	char *lastptr=&lastTemp;
 	char *filename_temp=NULL;
-	DEBUG_PRINT("Complete List RCVD");	
+	
 	int nofiles=0;					
 	int duplicate_flag=0,final_list=0, partflags[MAXFILESCOUNT][MAXDFSCOUNT];
 
+	DEBUG_PRINT("Complete List RCVD");	
+	DEBUG_PRINT("In main 1");
 
 	//clear the arrays 
 	//bzero(display_list,strlen(display_list));
@@ -1325,7 +1361,7 @@ int listMainRcv()
 		bzero(filename[i],strlen(filename[i]));
 		bzero(list_temp[i],strlen(list_temp[i]));
 	}
-
+	DEBUG_PRINT("In main 2");
 	for (i=0;i<MAXDFSCOUNT;i++){	
 		DEBUG_PRINT(" %s",list[i]);
 
@@ -1981,7 +2017,7 @@ int main (int argc, char * argv[] ){
 		   				DEBUG_PRINT("PASS CRED  => %d",passCred);
 					if(passCred==CRED_PASS){		
 						if ((strncmp(datatoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)){			
-
+							DEBUG_PRINT("Run LIST in Main ");	
 							if(listMainRcv()<0){
 								DEBUG_PRINT("NO Files found");
 							}
