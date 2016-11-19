@@ -92,6 +92,7 @@ typedef enum COMMANDLOCATION{
 							CommandExtra,//Extra Character
 							command_location,//Resource Method
 							file_location,// Resource URL
+							subfolder_location,//Sub folder locatio for PUT and GET 
 							
 						}COMMAND_LC;// Resource format
 
@@ -105,6 +106,7 @@ typedef enum PACKETLOCATION{
 							DFCDataloc,//Data Location
 							DFCFile2loc,//Command Location
 							DFCData2loc,//Data Location
+							DFCSubFolderloc,//Sub folder location 
 						}PACKET_LC;// Resource format
 
 
@@ -115,7 +117,9 @@ struct requestCommandFmt{
 		char DFCRequestPass[MAXCOLSIZE];
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
+		char DFCRequestFolder[MAXCOLSIZE];
 		int socket;
+		int DFServerId;
 };
 
 //Data exchnage format b/w DFS and DFC
@@ -128,7 +132,9 @@ struct DataFmt{
 		char DFCData[MAXBUFSIZE];
 		char DFCRequestFile2[MAXCOLSIZE];
 		char DFCData2[MAXBUFSIZE];
+		char DFCRequestFolder[MAXCOLSIZE];
 		int socket;
+		int DFServerId;
 };
 
 struct DataFmt datafromClient;// for data from client
@@ -593,7 +599,9 @@ int rcvFile (char *filename,char *dataInput){
     DEBUG_PRINT("Request File %s\n",filename);
     sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
     DEBUG_PRINT("Change working dir: %s\n", cwd);
-    chdir(cwd);
+    //new change
+    //chdir(cwd);
+    //
 	strcpy(filename,cwd);    
     //getcwd(cwd, sizeof(cwd));
     //DEBUG_PRINT("New working dir: %s\n", cwd);
@@ -633,13 +641,45 @@ int sendDataToClient (struct DataFmt sendData)
 
 	char sendMessage[MAXBUFSIZE];
 	//sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
-	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s|",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
 	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
 
 }
 
+//Ref:http://stackoverflow.com/questions/12797301/creating-directory-in-c
+int createDirectory(char *folderName){
+
+	char cwd[MAXPACKSIZE];
+
+	struct stat st;
+	//clear buffer 
+	bzero(cwd,sizeof(cwd));
+    getcwd(cwd, sizeof(cwd));
+    DEBUG_PRINT("Current working dir: %s\n", cwd);
+    DEBUG_PRINT("Config dir: %s\n", config.DFSdirectory);
+    DEBUG_PRINT("Request User %s\n", datafromClient.DFCRequestUser);
+    DEBUG_PRINT("Request Sub Folder %s\n",folderName);
+    sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,folderName);
+    DEBUG_PRINT("Change working dir: %s\n", cwd);
+    //chdir(cwd);
+	strcpy(folderName,cwd);    
+
+	DEBUG_PRINT("Create direcory");
+	if (stat(folderName,&st)!=0){//check if the location is possible or not 
+		DEBUG_PRINT("New directory %s",folderName);
+		mkdir(folderName,0777);//Make new directory with 777 permission 
+		return 1;//reurn success
+	}
+	else
+	{
+		printf("Can't create direcoty \n");
+	}	
+
+	return -1;// return unsuccess
+ 
+}
 
 /*************************************************************
 // Send a file from Server to Client
@@ -905,7 +945,7 @@ void *client_connections(void *client_sock_id)
 				total_attr_commands=0;
 
 
-				if((total_attr_commands=splitString(message_client,"|",packet,9)>0))
+				if((total_attr_commands=splitString(message_client,"|",packet,10)>0))
 				{
 					//copy contents to data structure of data struture 
 					strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
@@ -915,6 +955,7 @@ void *client_connections(void *client_sock_id)
 					memcpy(datafromClient.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
 					strcpy(datafromClient.DFCRequestFile2,packet[DFCFile2loc]);
 					memcpy(datafromClient.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
+					
 
 	   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
 	   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
@@ -923,6 +964,7 @@ void *client_connections(void *client_sock_id)
 	   				DEBUG_PRINT("Data 1 %s ",datafromClient.DFCData);
 	   				DEBUG_PRINT("File 2 %s",datafromClient.DFCRequestFile2);	   				
 	   				DEBUG_PRINT("Data 2 %s ",datafromClient.DFCData2);
+
 	   				
 	   				//DEBUG_PRINT("Total Commands %d",total_attr_commands);
 					
@@ -1009,6 +1051,35 @@ void *client_connections(void *client_sock_id)
 							}	
 												   		
 			  		}
+			  		else if ((strncmp(datafromClient.DFCRequestCommand,"MKDIR",strlen("MKDIR"))==0)){
+						//send command
+						DEBUG_PRINT("Inside MKDIR");
+						//bzero(directory,strlen(directory));
+						//strncat(directory,config.DFSdirectory,strlen(config.DFSdirectory));
+						//strcat(directory,"/");
+						//strncat(directory,packet[DFCUserloc],strlen(packet[DFCUserloc]));
+						//strcat(directory,"/");
+						//DEBUG_PRINT("directory : %s",directory);
+						//strncpy(directory,packet[DFCUserloc]);
+						strcpy(datafromClient.DFCRequestFolder,packet[DFCFileloc]);
+	   					DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
+						//Check for Credentials
+						if(credCheck()==CRED_PASS){
+							DEBUG_PRINT("Create Directory %s",datafromClient.DFCRequestFolder);
+							createDirectory(datafromClient.DFCRequestFolder);
+
+						}
+						else							
+						{
+							DEBUG_PRINT("Send to Invalid Error");
+							if((send(thread_sock,"Invalid Username/Password.Please try Again",strlen("Invalid Username/Password.Please try Again"),0))<0)		
+							{
+								fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+							}
+	
+						}	
+										
+					}
 			  		else
 			  		{
 			  			printf("Incorrect Command  \n");

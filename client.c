@@ -179,6 +179,8 @@ typedef enum COMMANDLOCATION{
 							CommandExtra,//Extra Character
 							command_location,//Resource Method
 							file_location,// Resource URL
+							subfolder_location,//Sub folder locatio for PUT and GET 
+							
 							
 						}COMMAND_LC;// Resource format
 
@@ -192,7 +194,7 @@ typedef enum PACKETLOCATION{
 							DFCDataloc,//Data Location
 							DFCFile2loc,//File 2 Location
 							DFCData2loc,//Data 2 Location
-							
+							DFCSubFolderloc,//Sub folder location 
 						}PACKET_LC;// Resource format
 
 
@@ -204,6 +206,7 @@ struct requestCommandFmt{
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
 		char DFCMergedFile[MAXCOLSIZE];
+		char DFCRequestFolder[MAXCOLSIZE];
 		int socket;
 		int DFServerId;
 };
@@ -219,6 +222,7 @@ struct DataFmt{
 		char DFCMergedFile[MAXCOLSIZE];
 		char DFCData[MAXBUFSIZE];
 		char DFCData2[MAXBUFSIZE];
+		char DFCRequestFolder[MAXCOLSIZE];
 		int socket;
 		int DFServerId;
 };
@@ -497,8 +501,8 @@ int sendDataToDFS (struct DataFmt sendData)
 {
 
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
-	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
+	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s|%s|",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2,sendData.DFCRequestFolder);
+	
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
 
@@ -510,7 +514,7 @@ int sendDataToDFS (struct DataFmt sendData)
 int sendcommandToDFS (struct requestCommandFmt reqCommand)
 {
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s|%s|%s|%s",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCMergedFile);
+	sprintf(sendMessage,"%s|%s|%s|%s|%s|",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCMergedFile,reqCommand.DFCRequestFolder);
 	DEBUG_PRINT("Command to Server => %s",sendMessage);
 
 	//Send Command
@@ -1099,12 +1103,24 @@ void *DFSThreadServed(void *Id){
 						DEBUG_PRINT("Inside Thread %d GET",(int)DFSId);						
 						sendcommandToDFS(requesttoserver);							
 						rcvDFSFile(sock[DFSId]);
-						passCred=CRED_PASS;
+						passCred=CRED_PASS;//check if 
 				  	}
 				  	else if ((strncmp(requesttoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
 								
 						DEBUG_PRINT("Inside Thread %d PUT",(int)DFSId);								
-						putDFSFile();							
+						putDFSFile();		
+
+					}
+					else if ((strncmp(action[command_location],"MKDIR",strlen("MKDIR"))==0))
+					{
+
+						DEBUG_PRINT("Inside Thread %d MKDIR",(int)DFSId);								
+						sendcommandToDFS(requesttoserver);		
+					}
+					else
+					{
+						//should not reach 
+						printf("incorrect Commnad ");
 					}
 				DEBUG_PRINT("UnLOcked Mutex");						
 				//Close multiple Socket 
@@ -1687,6 +1703,7 @@ int main (int argc, char * argv[] ){
 	printf("GET <Filename> - to get file from DFS\n");
 	printf("PUT <Filename> - to put file to DFS \n");
 	printf("LIST -list files on  DFS server\n");
+	printf("MKDIR <folderName> -to create a directory(subfolder) on DFS\n");
 	
 		
 	while(1)
@@ -1696,7 +1713,21 @@ int main (int argc, char * argv[] ){
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
 			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
+			bzero(requesttoserver.DFCRequestFolder,sizeof(requesttoserver.DFCRequestFolder));
+			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
+
+
+
+			bzero(datatoserver.DFCRequestCommand,sizeof(datatoserver.DFCRequestCommand));
+			bzero(datatoserver.DFCRequestFile,sizeof(datatoserver.DFCRequestFile));
+			bzero(datatoserver.DFCData,sizeof(datatoserver.DFCData));
+			bzero(datatoserver.DFCRequestFile2,sizeof(datatoserver.DFCRequestFile2));
+			bzero(datatoserver.DFCData2,sizeof(datatoserver.DFCData2));
+			bzero(datatoserver.DFCRequestFolder,sizeof(datatoserver.DFCRequestFolder));
+
+
 			bzero(command,sizeof(command));
+
 			partdest1[0]=1;
 			partdest1[1]=2;
 			partdest1[2]=3;
@@ -1724,8 +1755,7 @@ int main (int argc, char * argv[] ){
 			//Split the input from user 
 			if ((action=malloc(sizeof(action)*MAXCOLSIZE))){	
 				total_attr_commands=0;
-				if((total_attr_commands=splitString(command," ",action,3)>0))
-				{
+				if((total_attr_commands=splitString(command," ",action,4)>0)) {
 	   				DEBUG_PRINT("Total Commands >0  => %d",total_attr_commands);
 			  	}	
 				else
@@ -1746,9 +1776,12 @@ int main (int argc, char * argv[] ){
 			DEBUG_PRINT("List Buffer(should be empty or garbage) => %s",list);
 
 			strcpy(datatoserver.DFCRequestCommand,action[command_location]);
-			strcpy(datatoserver.DFCMergedFile,action[file_location]);
+			
 			strcpy(requesttoserver.DFCRequestCommand,action[command_location]);
-			strcpy(requesttoserver.DFCMergedFile,action[file_location]);
+
+
+
+						
 
 			//IN main depending on Command 
 
@@ -1759,12 +1792,26 @@ int main (int argc, char * argv[] ){
 					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
 								DEBUG_PRINT("Inside LIST");
 								fileFoundFlag = FILE_FOUND;
+								if (action[file_location]!=NULL){//check if present then taken as folder name
+									strcpy(requesttoserver.DFCRequestFolder,action[file_location]);
+								}
+
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");
 							DEBUG_PRINT("File Name %s",action[file_location]);
+							//copy the file name as check if file exist on Server side 
+							strcpy(datatoserver.DFCMergedFile,action[file_location]);
+							strcpy(requesttoserver.DFCMergedFile,action[file_location]);
 							fileFoundFlag = FILE_FOUND;
-						
+
+
+							if (action[subfolder_location]!=NULL){//check if present then taken as folder name
+								strncpy(requesttoserver.DFCRequestFolder,action[subfolder_location],sizeof(action[subfolder_location]));
+								strncpy(datatoserver.DFCRequestFolder,action[subfolder_location],sizeof(action[subfolder_location]));
+							}
+
+
 			  		}
 
 					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
@@ -1775,11 +1822,23 @@ int main (int argc, char * argv[] ){
 
 							DEBUG_PRINT("File Found %d",fileFoundFlag);
 							if(fileFoundFlag==FILE_FOUND){
-								DEBUG_PRINT("after strcpy Command %s File%s\n",action[command_location],action[file_location]); 		
+
+								//copy only if file exist on Client side 	
+								strcpy(datatoserver.DFCMergedFile,action[file_location]);
+								strcpy(requesttoserver.DFCMergedFile,action[file_location]);
+
+
+								if (action[subfolder_location]!=NULL){//check if present then taken as folder name
+									strcpy(requesttoserver.DFCRequestFolder,action[subfolder_location]);
+									strcpy(datatoserver.DFCRequestFolder,action[subfolder_location]);
+								}
+
+
+								DEBUG_PRINT("after strcpy Command=>%s File=>%s FOlder=>%s\n",action[command_location],action[file_location],datatoserver.DFCRequestFolder); 		
 							
 							
-								DEBUG_PRINT("MD5 Allocated");
-										MD5Cal(datatoserver.DFCMergedFile,MD5file);
+									MD5Cal(datatoserver.DFCMergedFile,MD5file);
+									DEBUG_PRINT("MD5 Allocated");
 									DEBUG_PRINT("MD5 value File=>%s , %s ",datatoserver.DFCMergedFile,MD5file);
 										//x=atoi(MD5file);
 									MD5length = strlen(MD5file);
@@ -1863,6 +1922,18 @@ int main (int argc, char * argv[] ){
 								fileFoundFlag = FILE_NOTFOUND;
 							}
 			  		}
+			  		else if((strncmp(action[command_location],"MKDIR",strlen("MKDIR"))==0))
+			  		{
+			  			DEBUG_PRINT("Inside MKDIR");
+						DEBUG_PRINT("FOlder Name %s",action[file_location]);
+						if (action[subfolder_location]!=NULL){//check if present then taken as folder name
+								strncpy(requesttoserver.DFCRequestFolder,action[file_location],sizeof(action[file_location]));
+								strncpy(datatoserver.DFCRequestFolder,action[file_location],sizeof(action[file_location]));
+						}
+						fileFoundFlag = FILE_FOUND;
+
+
+			  		}	
 			  		else
 			  		{	
 			  			commandFilter=1;
@@ -1874,7 +1945,7 @@ int main (int argc, char * argv[] ){
 
 			 DEBUG_PRINT("last Command %s File%s\n",action[command_location],action[file_location]); 		
 			 
-			 DEBUG_PRINT("*****cOMMAND %d, FILE FOUND %d",commandFilter,fileFoundFlag);
+			 DEBUG_PRINT("*****COMMAND %d, FILE FOUND %d",commandFilter,fileFoundFlag);
 			if(!commandFilter && fileFoundFlag == FILE_FOUND){
 				//Create the thread for all the communication with DFS Servers
 				for (c=0;c<MAXDFSCOUNT;c++ ){
