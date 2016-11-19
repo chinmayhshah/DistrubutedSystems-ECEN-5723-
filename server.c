@@ -27,9 +27,6 @@ Last Edit : 9/25
 #include <glob.h>
 
 //#include <time.h>
-
-#define MAXBUFSIZE 60000
-#define MAXPACKSIZE 1000
 #define MAXCOMMANDSIZE 100
 #define PACKETNO 7
 #define SIZEMESSAGE 7
@@ -45,12 +42,11 @@ Last Edit : 9/25
 struct timeval timeout={0,0};     
 
 
-#define MAXCOLSIZE 100
+#define MAXCOLSIZE 1000
 #define HTTPREQ 	30
-
 #define MAXDFSCOUNT 4
 #define MAXBUFSIZE 60000
-#define MAXPACKSIZE 1000
+#define MAXPACKSIZE 60000
 #define ERRORMSGSIZE 1000
 #define MAXCOMMANDSIZE 100
 #define MAXCONTENTSUPPORT 15
@@ -636,7 +632,8 @@ int sendDataToClient (struct DataFmt sendData)
 {
 
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s/%s/%s/%s/%s/%s/%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	//sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
 	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
@@ -671,6 +668,16 @@ int sendFile (char *filename,int socket){
 	struct DataFmt datatoClient;
 
 
+
+
+	// Clear the buffers 
+	for (i=0;i<MAXDFSCOUNT;i++){
+		bzero(filetoSend,sizeof(filetoSend));
+		bzero(filetoRead,sizeof(filetoRead));
+	}
+	
+	bzero(cwd,sizeof(cwd));
+	bzero(filetemp,sizeof(filetemp));
 	bzero(datatoClient.DFCRequestUser,sizeof(datatoClient.DFCRequestUser));
 	bzero(datatoClient.DFCRequestPass,sizeof(datatoClient.DFCRequestUser));
 	bzero(datatoClient.DFCRequestCommand,sizeof(datatoClient.DFCRequestUser));
@@ -712,7 +719,8 @@ int sendFile (char *filename,int socket){
     //getcwd(cwd, sizeof(cwd))
 
 	//seraching for partial file 
-		DEBUG_PRINT("Var i=>%d, countFiles=>%d\n",i,countFiles);
+	i=0;
+	DEBUG_PRINT("Var i=>%d, countFiles=>%d\n",i,countFiles);
 
     glob( filename, 0, NULL, &globbuf);
     if ( globbuf.gl_pathc == 0 ){
@@ -731,6 +739,7 @@ int sendFile (char *filename,int socket){
 	        i++;
 	   	 }
 	}   
+	DEBUG_PRINT("Var i=>%d, countFiles=>%d\n",i,countFiles);
 	globfree(&globbuf);
     //Complete search for files 
 	if(countFiles){
@@ -770,8 +779,8 @@ int sendFile (char *filename,int socket){
 		}	
 		strcpy(datatoClient.DFCRequestFile,filetoSend[0]);	
 		strcpy(datatoClient.DFCRequestFile2,filetoSend[1]);
-		strcpy(datatoClient.DFCData,data[0]);	
-		strcpy(datatoClient.DFCData2,data[1]);
+		memcpy(datatoClient.DFCData,data[0],sizeof(data[0]));	
+		memcpy(datatoClient.DFCData2,data[1],sizeof(data[1]));
 	}
 	else{
 		fileRet = FILE_NOTFOUND;
@@ -895,16 +904,16 @@ void *client_connections(void *client_sock_id)
 				total_attr_commands=0;
 
 
-				if((total_attr_commands=splitString(message_client,"/",packet,9)>0))
+				if((total_attr_commands=splitString(message_client,"|",packet,9)>0))
 				{
 					//copy contents to data structure of data struture 
 					strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
 					strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
 					strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
 					strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
-					strcpy(datafromClient.DFCData,packet[DFCDataloc]);
+					memcpy(datafromClient.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
 					strcpy(datafromClient.DFCRequestFile2,packet[DFCFile2loc]);
-					strcpy(datafromClient.DFCData2,packet[DFCData2loc]);
+					memcpy(datafromClient.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
 
 	   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
 	   				DEBUG_PRINT("Password %s",datafromClient.DFCRequestPass);
