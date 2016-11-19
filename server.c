@@ -600,7 +600,7 @@ int rcvFile (char *filename,char *dataInput,char *folder){
     //sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
 
     if(strlen(datafromClient.DFCRequestFolder)>0){
-    	sprintf(cwd,"%s%s/%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,folder,filename);    	
+    	sprintf(cwd,"%s%s/%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,folder,filename);    	
     	DEBUG_PRINT("with sub folder %s\n", cwd);
     }
     else
@@ -961,30 +961,7 @@ void *client_connections(void *client_sock_id)
 
 		datafromClient.socket=0;	
 		datafromClient.socket=thread_sock;
-
-
-		//clear the buffer 
-		/*
-		bzero(packet[DFCUserloc],packet[DFCUserloc]);
-		bzero(packet[DFCPassloc],packet[DFCPassloc]);
-		bzero(packet[DFCCommandloc],packet[DFCCommandloc]);
-		bzero(packet[DFCFileloc],packet[DFCFileloc]);
-		bzero(packet[DFCDataloc],packet[DFCDataloc]);
-		bzero(packet[DFCFile2loc],packet[DFCFile2loc]);	   				
-		bzero(packet[DFCData2loc],packet[DFCData2loc]);
-		*/
-		//bzero(packet[DFCUserloc],sizeof(packet[DFCUserloc]));
-		//bzero(packet[DFCPassloc],sizeof(packet[DFCPassloc]));
-		//bzero(packet[DFCCommandloc],sizeof(packet[DFCCommandloc]));
-		//bzero(packet[DFCFileloc],sizeof(packet[DFCFileloc]));
-		
-		//bzero(packet[DFCFile2loc],sizeof(packet[DFCSubFolderloc]));
-		//bzero(packet[DFCData2loc],sizeof(packet[DFCFile2loc]));
-		// Recieve the message from client  and reurn back to client 
-
-
-
-
+		DEBUG_PRINT("Clear Message : %s",message_client);
 		if((read_bytes =recv(thread_sock,message_client,sizeof(message_client),0))>0){
 			//bzero(packet[DFCDataloc],sizeof(packet[DFCDataloc]));
 			DEBUG_PRINT("Read Bytes %d",read_bytes);	
@@ -1005,13 +982,13 @@ void *client_connections(void *client_sock_id)
 				if((total_attr_commands=splitString(message_client,"|",packet,10)>0))
 				{
 					//copy contents to data structure of data struture 
-					strcpy(datafromClient.DFCRequestUser,packet[DFCUserloc]);
-					strcpy(datafromClient.DFCRequestPass,packet[DFCPassloc]);
-					strcpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc]);
-					strcpy(datafromClient.DFCRequestFile,packet[DFCFileloc]);
-					memcpy(datafromClient.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
-					strcpy(datafromClient.DFCRequestFile2,packet[DFCFile2loc]);
-					memcpy(datafromClient.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
+					strncpy(datafromClient.DFCRequestUser,packet[DFCUserloc],sizeof(packet[DFCUserloc]));
+					strncpy(datafromClient.DFCRequestPass,packet[DFCPassloc],sizeof(packet[DFCPassloc]));
+					strncpy(datafromClient.DFCRequestCommand,packet[DFCCommandloc],sizeof(packet[DFCCommandloc]));
+					strncpy(datafromClient.DFCRequestFile,packet[DFCFileloc],sizeof(packet[DFCFileloc]));
+					strncpy(datafromClient.DFCData,packet[DFCDataloc],sizeof(packet[DFCDataloc]));
+					strncpy(datafromClient.DFCRequestFile2,packet[DFCFile2loc],sizeof(packet[DFCFile2loc]));
+					strncpy(datafromClient.DFCData2,packet[DFCData2loc],sizeof(packet[DFCData2loc]));
 					
 
 	   				DEBUG_PRINT("User %s ",datafromClient.DFCRequestUser);
@@ -1094,8 +1071,15 @@ void *client_connections(void *client_sock_id)
 							DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
 							if(credCheck()==CRED_PASS){
 								DEBUG_PRINT("receive Files");
-								strcpy(datafromClient.DFCRequestFolder,packet[DFCSubFolderloc]);
-	   							DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
+								if(strlen(packet[DFCSubFolderloc])>2) {
+									strcpy(datafromClient.DFCRequestFolder,packet[DFCSubFolderloc]);
+		   							DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
+		   						}
+		   						else
+		   						{
+		   							strcpy(datafromClient.DFCRequestFolder,"");
+		   							DEBUG_PRINT("No SubFolder %s ",datafromClient.DFCRequestFolder);	
+		   						}	
 								rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData,datafromClient.DFCRequestFolder);//Recieve the part files 		
 								rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2,datafromClient.DFCRequestFolder);	
 								if((send(thread_sock,"OK",strlen("OK"),0))<0)		

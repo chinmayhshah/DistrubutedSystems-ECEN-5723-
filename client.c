@@ -1753,7 +1753,7 @@ int main (int argc, char * argv[] ){
 			int cmpvalue=100;
 
 			//Split the input from user 
-			if ((action=malloc(sizeof(action)*MAXCOLSIZE))){	
+			if ((action=calloc(MAXCOLSIZE,sizeof(action)))){	
 				total_attr_commands=0;
 				if((total_attr_commands=splitString(command," ",action,4)>0)) {
 	   				DEBUG_PRINT("Total Commands >0  => %d",total_attr_commands);
