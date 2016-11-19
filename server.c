@@ -24,6 +24,7 @@ Last Edit : 9/25
 #include <sys/time.h>
 #include <pthread.h> // For threading , require change in Makefile -lpthread
 //#include <time.h>
+#include <glob.h>
 
 //#include <time.h>
 
@@ -128,9 +129,9 @@ struct DataFmt{
 		char DFCRequestPass[MAXCOLSIZE];
 		char DFCRequestCommand[MAXCOLSIZE];
 		char DFCRequestFile[MAXCOLSIZE];
-		char DFCData[MAXPACKSIZE];
+		char DFCData[MAXBUFSIZE];
 		char DFCRequestFile2[MAXCOLSIZE];
-		char DFCData2[MAXPACKSIZE];
+		char DFCData2[MAXBUFSIZE];
 		int socket;
 };
 
@@ -161,6 +162,7 @@ typedef char type2D[10][MAXCOMMANDSIZE];
 
 typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
 
+enum FILE_STATE {FILE_NOTFOUND,FILE_FOUND,FILE_NOTOPEN};
 
 int sock;                           //This will be our socket
 int server_sock,client_sock;                           //This will be our socket
@@ -629,7 +631,17 @@ int rcvFile (char *filename,char *dataInput){
 	return rcount;
 }
 
+//Send data to different DFS
+int sendDataToClient (struct DataFmt sendData)
+{
 
+	char sendMessage[MAXBUFSIZE];
+	sprintf(sendMessage,"%s/%s/%s/%s/%s/%s/%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
+	DEBUG_PRINT("Message to Server =>%s",sendMessage);
+	write(sendData.socket,sendMessage,sizeof(sendMessage));		
+
+}
 
 
 /*************************************************************
@@ -640,107 +652,153 @@ o/p : find and file is pushed to client
 Reference for understanding :
 https://lms.ksu.edu.sa/bbcswebdav/users/mdahshan/Courses/CEN463/Course-Notes/07-file_transfer_ex.pdf	  
 **************************************************************/
-/*
-int sendFile (char *filename){
+
+int sendFile (char *filename,int socket){
 	
 	int fd; // File decsriptor 
 	ssize_t file_bytes,file_size;
-	int scount=0;//count for send count 
+	char data[MAXDFSCOUNT][MAXBUFSIZE];
+	int fileStatus=FILE_NOTFOUND,i=0,j=0;
+	char cwd[MAXPACKSIZE];
+	char filetemp[MAXPACKSIZE];
+	char filetoSend[MAXDFSCOUNT][MAXCOLSIZE];
+	char filetoRead[MAXDFSCOUNT][MAXCOLSIZE];
+	char *ret=NULL;
+	int countFiles=0;
+	int fileRet=0;
 
-	char *err_indication = "Error";
-	char *comp_indication = "Comp";
 
-	char err_message[ERRMESSAGE] = "File not Present"; 
-	char *MD5_message;
-	char MD5_temp[MD5_DIGEST_LENGTH*2];
-	MD5_message = MD5_temp;
-	char send_pack[MAXPACKSIZE];
-	char send_frame[MAXFRAMESIZE];
-	char send_size[SIZEMESSAGE];
-	int temp_displace=PACKETNO+SIZEMESSAGE;
-	int recvd_ack_no=0;
-	int repeat_count=MAXREPEATCOUNT;
-	int flags = fcntl(sock, F_GETFL);
-	//open the file
-	if((fd= open(filename,O_RDONLY)) <0 ){//open read only file 
-		perror(filename);//if can't open
-		//send to client the error 
-		sendtoClient(err_indication,sizeof(err_indication),NOACK);
-		sendtoClient(err_message,sizeof(err_message),NOACK);
-		return -1;
+	struct DataFmt datatoClient;
+
+
+	bzero(datatoClient.DFCRequestUser,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCRequestPass,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCRequestCommand,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCRequestFile,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCData,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCRequestFile2,sizeof(datatoClient.DFCRequestUser));
+	bzero(datatoClient.DFCData2,sizeof(datatoClient.DFCRequestUser));
+
+	DEBUG_PRINT("Before updating (Should be blank)");
+	DEBUG_PRINT("User %s ",datatoClient.DFCRequestUser);
+	DEBUG_PRINT("Password %s",datatoClient.DFCRequestPass);
+	DEBUG_PRINT("Command %s",datatoClient.DFCRequestCommand);
+	DEBUG_PRINT("File 1 %s",datatoClient.DFCRequestFile);
+	DEBUG_PRINT("Data 1 %s ",datatoClient.DFCData);
+	DEBUG_PRINT("File 2 %s",datatoClient.DFCRequestFile2);	   				
+	DEBUG_PRINT("Data 2 %s ",datatoClient.DFCData2);
+
+
+	glob_t  globbuf;
+	//
+	DEBUG_PRINT("File to Find %s",filename);
+	sprintf(filetemp,".%s.",filename);
+
+	DEBUG_PRINT("Append piece format %s",filename);
+	strcpy(filename,filetemp);
+
+
+
+	getcwd(cwd, sizeof(cwd));
+    DEBUG_PRINT("Current working dir: %s\n", cwd);
+    DEBUG_PRINT("Config dir: %s\n", config.DFSdirectory);
+    DEBUG_PRINT("Request User %s\n", datafromClient.DFCRequestUser);
+    DEBUG_PRINT("Request Part File %s\n",filename);
+    sprintf(cwd,"%s%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+    DEBUG_PRINT("Search in working dir: %s\n", cwd);
+    //chdir(cwd);
+
+	strcpy(filename,cwd);    
+    //getcwd(cwd, sizeof(cwd))
+
+	//seraching for partial file 
+		DEBUG_PRINT("Var i=>%d, countFiles=>%d\n",i,countFiles);
+
+    glob( filename, 0, NULL, &globbuf);
+    if ( globbuf.gl_pathc == 0 ){
+        DEBUG_PRINT("there were no matching files\n");
+    	return FILE_NOTFOUND;
+    }
+    else{
+        DEBUG_PRINT("the part FIles found  : 0=>%s\n 1=>%s\n", globbuf.gl_pathv[0],globbuf.gl_pathv[1]);
+        while(i<globbuf.gl_pathc && countFiles <(MAXDFSCOUNT/2) ){		        
+	        strcpy(filetoRead[countFiles],globbuf.gl_pathv[i]);
+	        //sscanf(filetoSend[countFiles],"*.%s.txt.*",filetoRead[countFiles]);		        		        		       
+	        ret = strstr(filetoRead[countFiles], ".");
+	        strcpy(filetoSend[countFiles],ret);
+	        DEBUG_PRINT("File Location =>%s,FIle to send =>%s\n", filetoRead[countFiles],filetoSend[countFiles]);
+	        countFiles++;
+	        i++;
+	   	 }
+	}   
+	globfree(&globbuf);
+    //Complete search for files 
+	if(countFiles){
+
+		strcpy(datatoClient.DFCRequestUser,datafromClient.DFCRequestUser);
+		strcpy(datatoClient.DFCRequestPass,datafromClient.DFCRequestPass);
+		strcpy(datatoClient.DFCRequestCommand,datafromClient.DFCRequestCommand);
+		
+
+		//open the file
+		while(j<countFiles){		
+			if((fd= open(filetoRead[j],O_RDONLY)) <0 ){//open read only file 
+				perror(filename);//if can't open
+				//send to client the error 
+				DEBUG_PRINT("Cant Open File %s",filetoRead[j]);
+				//sendtoClient(err_indication,sizeof(err_indication),NOACK);
+				fileRet = FILE_NOTOPEN;
+				//return -1;
+			}
+			else // open file successfully ,read file 
+			{
+				//debug 
+				//printf("Sending %s\n",filename);
+				//read bytes and send 
+				fileRet = FILE_FOUND;
+				if (file_bytes = read(fd,data[j],MAXPACKSIZE) >0 ){//read data from file 							
+					file_bytes =0;
+
+				}
+				
+			}
+			if (fd){
+				close(fd);//close file if opened 
+			}
+			DEBUG_PRINT("Data %d %s",j,data[j]);
+			j++;
+		}	
+		strcpy(datatoClient.DFCRequestFile,filetoSend[0]);	
+		strcpy(datatoClient.DFCRequestFile2,filetoSend[1]);
+		strcpy(datatoClient.DFCData,data[0]);	
+		strcpy(datatoClient.DFCData2,data[1]);
 	}
-	else // open file successfully ,read file 
-	{
-		//debug 
-		//printf("Sending %s\n",filename);
-		//read bytes and send 
-		while((file_bytes = read(fd,send_pack,MAXPACKSIZE)) != 0 ){//read data from file 			
-			//Append packet no to packet --Frame -- PACKETNO|PACKETSIZE|PACKETDATA
-			sprintf(send_frame,"%06d|%06d|",scount,(int)file_bytes);
-			memcpy(send_frame+temp_displace,send_pack,file_bytes);//copy the send pack to send frame (** use memset as image files an issue)
-			//printf("frame :%s\n",send_frame );
+	else{
+		fileRet = FILE_NOTFOUND;
+	}	
 
-			#ifndef RELIABILITY
-				recvd_ack_no=sendtoClient(send_frame,sizeof(send_frame),ACK);	//send frame
-			#else	
-				//RELIABILITY 
-				//Reset to UnBlocking 
-				timeout.tv_sec = 0;
-				timeout.tv_usec = 100000;
+	DEBUG_PRINT("After updating (Should be Complete)");
+	DEBUG_PRINT("User %s ",datatoClient.DFCRequestUser);
+	DEBUG_PRINT("Password %s",datatoClient.DFCRequestPass);
+	DEBUG_PRINT("Command %s",datatoClient.DFCRequestCommand);
+	DEBUG_PRINT("File 1 %s",datatoClient.DFCRequestFile);
+	DEBUG_PRINT("Data 1 %s ",datatoClient.DFCData);
+	DEBUG_PRINT("File 2 %s",datatoClient.DFCRequestFile2);	   				
+	DEBUG_PRINT("Data 2 %s ",datatoClient.DFCData2);
 
-				if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0){
-	        		perror("setsockopt failed\n");
-	    		}
-	    		else
-	    		{	//repeat for MAXREPEAT COUNT till acknowledge recieved 
-	    			do
-	    			{
-		    			recvd_ack_no=sendtoClient(send_frame,sizeof(send_frame),ACK);	//send frame
-		    			//printf("ack no%d\n",recvd_ack_no );
-		    		}while (recvd_ack_no!=scount && repeat_count-- >=0);	
-		    		if (recvd_ack_no != scount)//if even multiple tries failed 
-		    		{
-		    			//printf("try Again !!Files failing %d times\n",MAXREPEATCOUNT);
-		    			repeat_count=MAXREPEATCOUNT;
-		    		}
-
-		    		else
-		    		{	
-			    		//printf("Send the packet in %d\n",repeat_count );
-			    		repeat_count=MAXREPEATCOUNT;
-			    		//recvd_ack_no=0;
-			    	}	
-	    		}
-	    		//Reset to Blocking 
-	    		timeout.tv_sec = 0;
-				timeout.tv_usec = 0;
-				if (setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout,sizeof(timeout)) < 0){
-	        		perror("setsockopt failed\n");
-	    		}
-				//Set it  blocking
-				//fcntl(sock, F_SETFL, flags);
-
-			#endif
-			//update count 
-			scount++;
-			//clearing for new data
-			file_bytes =0;
-			bzero(send_pack,sizeof(send_pack));
-			bzero(send_frame,sizeof(send_frame));
-		}		
-		close(fd);//close file if opened 
+	//send  data requested back to client 
+	if(fileRet==FILE_FOUND){
+		DEBUG_PRINT("Send Data to Client");
+		datatoClient.socket=socket;
+		sendDataToClient(datatoClient);
 	}
-	sendtoClient(comp_indication,(ssize_t)sizeof(comp_indication),NOACK);	//send Completion of File
-	MD5Cal(filename,MD5_message);
-	//printf("MD5 Message%s\n",MD5_message );
-	//Send MD5 Hash value 
-	sendtoClient(MD5_message,2*MD5_DIGEST_LENGTH,NOACK);
 
-	
+
 	//printf("No of packets send %d\n",scount );
-	return scount;
+	return fileRet;
+	
 }
-*/
+
 
 //Client connection for each client 
 /*
@@ -890,16 +948,23 @@ void *client_connections(void *client_sock_id)
 							DEBUG_PRINT("Inside GET");
 							DEBUG_PRINT("File Name %s",packet[DFCFileloc]);
 
-							//strcpy(requesttoserver.DFCRequestFile,action[file_location]);
-							//send command
-							//strcpy(requesttoserver.DFCRequestCommand,"GET");
-							//sendcommandToDFS(requesttoserver);
-
-								//if(rcvFile(action[file_location]) <0){	
-								//	printf("Error in get!!!\n");
-									
-								//} v
-						
+							if(credCheck()==CRED_PASS){
+								DEBUG_PRINT("receive Files");
+								sendFile(datafromClient.DFCRequestFile,thread_sock);//Recieve the part files 										
+								if((send(thread_sock,"OK",strlen("OK"),0))<0)		
+								{
+									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								}
+							}
+							else							
+							{
+								DEBUG_PRINT("Username and Password Didnt match,send error");
+								if((write(thread_sock,"Invalid Username/Password.Please try Again",strlen("Invalid Username/Password.Please try Again")))<0)		
+								{
+									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								}
+		
+							}
 			  		}
 
 					else if ((strncmp(datafromClient.DFCRequestCommand,"PUT",strlen("PUT")))==0){
