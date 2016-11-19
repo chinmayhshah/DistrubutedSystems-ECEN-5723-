@@ -782,7 +782,7 @@ int mergeFile(char *mergedFileName,int parts)
     DEBUG_PRINT("NO of parts => %d",parts);
 
 
-    mergeFile=fopen(mergedFileName, "wb");//Open destn Merge file name in write mode 
+    mergeFile=fopen(&mergedFileName[1], "wb");//Open destn Merge file name in write mode 
     if (mergeFile==NULL)// if file closed or not
     {
         printf("couldn't open file %s",mergedFileName);
@@ -1563,16 +1563,35 @@ int CheckSever(){
 
 }
 
-int FilePresent(char fname){
+int FilePresent(char *fname){
+
+		
+       if (strlen(fname)<1){
+       		return FILE_NOTFOUND;
+       }
+
+
+			FILE *fp = fopen (fname, "r");
+			if (fp!=NULL) {
+				fclose (fp);
+				return FILE_FOUND ;
+			}
+			else{
+				return FILE_NOTFOUND ;
+			}	
+			
+}
+/*
        if( access( fname, F_OK ) != -1 ) {
        		//FILE exists
        		DEBUG_PRINT("File is present %s",fname);
-           return FILE_FOUND ;
+
        } else {
        		DEBUG_PRINT("File not present %s",fname);
            return FILE_NOTFOUND ;
        }
-}
+*/
+
 
 		
 int main (int argc, char * argv[] ){
@@ -1593,7 +1612,7 @@ int main (int argc, char * argv[] ){
 	passCred=CRED_FAIL;
 	char temmpFileName[MAXCOLSIZE];
     int commandFilter=0,fileCheck=0;
-
+    int fileFoundFlag=FILE_NOTFOUND;
 	//Input of filename for config 
 	if (argc != 2){
 		printf ("USAGE:  <Conf File>\n");
@@ -1686,6 +1705,7 @@ int main (int argc, char * argv[] ){
 			partdest2[1]=3;
 			partdest2[2]=4;
 			partdest2[3]=1;
+
 			//partdest2[MAXDFSCOUNT]={2,3,4,1};
 
 			//wait for input from user 
@@ -1738,19 +1758,24 @@ int main (int argc, char * argv[] ){
 					
 					if ((strncmp(action[command_location],"LIST",strlen("LIST"))==0)){
 								DEBUG_PRINT("Inside LIST");
+								fileFoundFlag = FILE_FOUND;
 					}
 					else if ((strncmp(action[command_location],"GET",strlen("GET")))==0){
 							DEBUG_PRINT("Inside GET");
 							DEBUG_PRINT("File Name %s",action[file_location]);
+							fileFoundFlag = FILE_FOUND;
 						
 			  		}
 
 					else if ((strncmp(action[command_location],"PUT",strlen("PUT")))==0){
 							DEBUG_PRINT("Inside PUT");
 							DEBUG_PRINT("File Name %s",action[file_location]);
-							
-							
-							DEBUG_PRINT("after strcpy Command %s File%s\n",action[command_location],action[file_location]); 		
+							fileFoundFlag=FilePresent(action[file_location]);							
+
+
+							DEBUG_PRINT("File Found %d",fileFoundFlag);
+							if(fileFoundFlag==FILE_FOUND){
+								DEBUG_PRINT("after strcpy Command %s File%s\n",action[command_location],action[file_location]); 		
 							
 							
 								DEBUG_PRINT("MD5 Allocated");
@@ -1831,11 +1856,17 @@ int main (int argc, char * argv[] ){
 								
 								DEBUG_PRINT("Files are split\n");
 								DEBUG_PRINT("after Split%s File%s\n",datatoserver.DFCRequestCommand, datatoserver.DFCMergedFile); 									
-						
+							}
+							else
+							{
+								printf("File Not Found\n");
+								fileFoundFlag = FILE_NOTFOUND;
+							}
 			  		}
 			  		else
 			  		{	
 			  			commandFilter=1;
+			  			fileFoundFlag = FILE_NOTFOUND;
 			  			DEBUG_PRINT("Input in correct \n");
 
 			  		}	
@@ -1843,8 +1874,8 @@ int main (int argc, char * argv[] ){
 
 			 DEBUG_PRINT("last Command %s File%s\n",action[command_location],action[file_location]); 		
 			 
-
-			if(!commandFilter){
+			 DEBUG_PRINT("*****cOMMAND %d, FILE FOUND %d",commandFilter,fileFoundFlag);
+			if(!commandFilter && fileFoundFlag == FILE_FOUND){
 				//Create the thread for all the communication with DFS Servers
 				for (c=0;c<MAXDFSCOUNT;c++ ){
 					//DEBUG_PRINT("DFS Thread %d",i);
@@ -1889,22 +1920,22 @@ int main (int argc, char * argv[] ){
 							}	
 						}												
 						else if ((strncmp(datatoserver.DFCRequestCommand,"GET",strlen("GET")))==0){
-								DEBUG_PRINT("Inside GET after Thread");
-								DEBUG_PRINT("File Name %s",action[file_location]);
-								sprintf(temmpFileName,".%s",action[file_location]);
-								DEBUG_PRINT("File to be merged  %s",action[file_location]);	
-								mergeFile(temmpFileName,MAXDFSCOUNT);
+							DEBUG_PRINT("Inside GET after Thread");
+							DEBUG_PRINT("File Name %s",action[file_location]);
+							sprintf(temmpFileName,".%s",action[file_location]);
+							DEBUG_PRINT("File to be merged  %s",action[file_location]);	
+							mergeFile(temmpFileName,MAXDFSCOUNT);
 							
 				  		}
 
 						else if ((strncmp(datatoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
-								DEBUG_PRINT("Inside PUT after Thread");
-								DEBUG_PRINT("File Name %s",action[file_location]);						
+							DEBUG_PRINT("Inside PUT after Thread");
+							DEBUG_PRINT("File Name %s",action[file_location]);						
 
 				  		}
 				  		else
 				  		{
-				  					DEBUG_PRINT("Command not found ");
+				  			DEBUG_PRINT("Command not found ");
 
 				  		}	
 					}  	

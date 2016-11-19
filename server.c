@@ -879,6 +879,7 @@ void *client_connections(void *client_sock_id)
 	char command[MAXPACKSIZE];
 	char (*packet)[MAXCOLSIZE];
 	char directory[MAXCOLSIZE]=".";
+	int fileFoundFlag=FILE_NOTFOUND;
 	DEBUG_PRINT("passed Client connection %d\n",(int)thread_sock);
 	DEBUG_PRINT("in client connections dir : %s",directory);
 		//Clear the command and request to Client 
@@ -959,11 +960,20 @@ void *client_connections(void *client_sock_id)
 
 							if(credCheck()==CRED_PASS){
 								DEBUG_PRINT("receive Files");
-								sendFile(datafromClient.DFCRequestFile,thread_sock);//Recieve the part files 										
-								if((send(thread_sock,"OK",strlen("OK"),0))<0)		
-								{
-									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+								fileFoundFlag=sendFile(datafromClient.DFCRequestFile,thread_sock);//Recieve the part files 										
+								if(fileFoundFlag == FILE_FOUND){
+									if((send(thread_sock,"OK",strlen("OK"),0))<0)		
+									{
+										fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+									}
 								}
+								else{
+									DEBUG_PRINT("Username and Password Didnt match,send error");
+									if((write(thread_sock,"Invalid !!File Not Found",strlen("Invalid !!File Not Found")))<0)		
+									{
+										fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
+									}		
+								}	
 							}
 							else							
 							{
