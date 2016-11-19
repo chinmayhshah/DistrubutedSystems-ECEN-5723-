@@ -572,7 +572,7 @@ Reference for  basic understanding :
 https://lms.ksu.edu.sa/bbcswebdav/users/mdahshan/Courses/CEN463/Course-Notes/07-file_transfer_ex.pdf	  
 **************************************************************/
 
-int rcvFile (char *filename,char *dataInput){
+int rcvFile (char *filename,char *dataInput,char *folder){
 	
 	int fd; // File decsriptor 
 	ssize_t file_bytes=0;
@@ -597,7 +597,27 @@ int rcvFile (char *filename,char *dataInput){
     DEBUG_PRINT("Config dir: %s\n", config.DFSdirectory);
     DEBUG_PRINT("Request User %s\n", datafromClient.DFCRequestUser);
     DEBUG_PRINT("Request File %s\n",filename);
-    sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+    //sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+
+    if(strlen(datafromClient.DFCRequestFolder)>0){
+    	sprintf(cwd,"%s%s/%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,folder,filename);    	
+    	DEBUG_PRINT("with sub folder %s\n", cwd);
+    }
+    else
+    {	
+		sprintf(cwd,"%s%s/%s/%s",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+		DEBUG_PRINT("Search in working dir: %s\n", cwd);
+    }		
+
+
+
+
+
+
+
+
+
+
     DEBUG_PRINT("Change working dir: %s\n", cwd);
     //new change
     //chdir(cwd);
@@ -712,8 +732,8 @@ int sendFile (char *filename,int socket){
 
 	// Clear the buffers 
 	for (i=0;i<MAXDFSCOUNT;i++){
-		bzero(filetoSend,sizeof(filetoSend));
-		bzero(filetoRead,sizeof(filetoRead));
+		bzero(filetoSend[i],sizeof(filetoSend));
+		bzero(filetoRead[i],sizeof(filetoRead));
 	}
 	
 	bzero(cwd,sizeof(cwd));
@@ -725,6 +745,7 @@ int sendFile (char *filename,int socket){
 	bzero(datatoClient.DFCData,sizeof(datatoClient.DFCRequestUser));
 	bzero(datatoClient.DFCRequestFile2,sizeof(datatoClient.DFCRequestUser));
 	bzero(datatoClient.DFCData2,sizeof(datatoClient.DFCRequestUser));
+	//bzero(datatoClient.DFCRequestFolder,sizeof(datatoClient.DFCRequestFolder));
 
 	DEBUG_PRINT("Before updating (Should be blank)");
 	DEBUG_PRINT("User %s ",datatoClient.DFCRequestUser);
@@ -734,6 +755,10 @@ int sendFile (char *filename,int socket){
 	DEBUG_PRINT("Data 1 %s ",datatoClient.DFCData);
 	DEBUG_PRINT("File 2 %s",datatoClient.DFCRequestFile2);	   				
 	DEBUG_PRINT("Data 2 %s ",datatoClient.DFCData2);
+	
+
+
+
 
 
 	glob_t  globbuf;
@@ -751,8 +776,17 @@ int sendFile (char *filename,int socket){
     DEBUG_PRINT("Config dir: %s\n", config.DFSdirectory);
     DEBUG_PRINT("Request User %s\n", datafromClient.DFCRequestUser);
     DEBUG_PRINT("Request Part File %s\n",filename);
-    sprintf(cwd,"%s%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
-    DEBUG_PRINT("Search in working dir: %s\n", cwd);
+    DEBUG_PRINT("Sub folder %s ",datafromClient.DFCRequestFolder);
+    if(strlen(datafromClient.DFCRequestFolder)>0){
+    	sprintf(cwd,"%s%s/%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,datafromClient.DFCRequestFolder,filename);    	
+    	DEBUG_PRINT("with sub folder %s\n", cwd);
+    }
+    else
+    {	
+		sprintf(cwd,"%s%s/%s/%s*",cwd,config.DFSdirectory,datafromClient.DFCRequestUser,filename);
+		DEBUG_PRINT("Search in working dir: %s\n", cwd);
+    }		
+    
     //chdir(cwd);
 
 	strcpy(filename,cwd);    
@@ -927,9 +961,32 @@ void *client_connections(void *client_sock_id)
 
 		datafromClient.socket=0;	
 		datafromClient.socket=thread_sock;
-		// Recieve the message from client  and reurn back to client 
-		if((read_bytes =recv(thread_sock,message_client,sizeof(message_client),0))>0){
 
+
+		//clear the buffer 
+		/*
+		bzero(packet[DFCUserloc],packet[DFCUserloc]);
+		bzero(packet[DFCPassloc],packet[DFCPassloc]);
+		bzero(packet[DFCCommandloc],packet[DFCCommandloc]);
+		bzero(packet[DFCFileloc],packet[DFCFileloc]);
+		bzero(packet[DFCDataloc],packet[DFCDataloc]);
+		bzero(packet[DFCFile2loc],packet[DFCFile2loc]);	   				
+		bzero(packet[DFCData2loc],packet[DFCData2loc]);
+		*/
+		//bzero(packet[DFCUserloc],sizeof(packet[DFCUserloc]));
+		//bzero(packet[DFCPassloc],sizeof(packet[DFCPassloc]));
+		//bzero(packet[DFCCommandloc],sizeof(packet[DFCCommandloc]));
+		//bzero(packet[DFCFileloc],sizeof(packet[DFCFileloc]));
+		
+		//bzero(packet[DFCFile2loc],sizeof(packet[DFCSubFolderloc]));
+		//bzero(packet[DFCData2loc],sizeof(packet[DFCFile2loc]));
+		// Recieve the message from client  and reurn back to client 
+
+
+
+
+		if((read_bytes =recv(thread_sock,message_client,sizeof(message_client),0))>0){
+			//bzero(packet[DFCDataloc],sizeof(packet[DFCDataloc]));
 			DEBUG_PRINT("Read Bytes %d",read_bytes);	
 			//printf("request from client %s\n",message_client );
 			strcpy(message_bkp,message_client);//backup of orginal message 
@@ -941,7 +998,7 @@ void *client_connections(void *client_sock_id)
 			}
 
 			//
-				if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
+				if ((packet=calloc(MAXCOLSIZE,sizeof(packet)))){	
 				total_attr_commands=0;
 
 
@@ -982,6 +1039,8 @@ void *client_connections(void *client_sock_id)
 						//Check for Credentials
 						if(credCheck()==CRED_PASS){
 							DEBUG_PRINT("Send to LIST fundtion");
+							strcpy(datafromClient.DFCRequestFolder,packet[DFCDataloc]);
+	   						DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
 							list(directory,thread_sock);
 
 						}
@@ -1002,6 +1061,8 @@ void *client_connections(void *client_sock_id)
 
 							if(credCheck()==CRED_PASS){
 								DEBUG_PRINT("receive Files");
+								strcpy(datafromClient.DFCRequestFolder,packet[DFCDataloc]);
+	   							DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
 								fileFoundFlag=sendFile(datafromClient.DFCRequestFile,thread_sock);//Recieve the part files 										
 								if(fileFoundFlag == FILE_FOUND){
 									if((send(thread_sock,"OK",strlen("OK"),0))<0)		
@@ -1033,8 +1094,10 @@ void *client_connections(void *client_sock_id)
 							DEBUG_PRINT("File Name %s",datafromClient.DFCRequestFile);
 							if(credCheck()==CRED_PASS){
 								DEBUG_PRINT("receive Files");
-								rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData);//Recieve the part files 		
-								rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2);	
+								strcpy(datafromClient.DFCRequestFolder,packet[DFCSubFolderloc]);
+	   							DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
+								rcvFile(datafromClient.DFCRequestFile,datafromClient.DFCData,datafromClient.DFCRequestFolder);//Recieve the part files 		
+								rcvFile(datafromClient.DFCRequestFile2,datafromClient.DFCData2,datafromClient.DFCRequestFolder);	
 								if((send(thread_sock,"OK",strlen("OK"),0))<0)		
 								{
 									fprintf(stderr,"Error in sending to clinet in lsit send %s\n",strerror(errno));
@@ -1104,6 +1167,15 @@ void *client_connections(void *client_sock_id)
 			}
 
 	}
+	//Free the command allocated 
+	DEBUG_PRINT("Deallocate packet ");
+		if (packet!=NULL){
+			//free alloaction of memory 
+			for(i=0;i<total_attr_commands;i++){
+				free((*packet)[i]);
+			}
+			free(packet);//clear  the request recieved 
+		}
 		
 	DEBUG_PRINT("Completed \n");
 	//Closing SOCKET

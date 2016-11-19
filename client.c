@@ -1945,7 +1945,7 @@ int main (int argc, char * argv[] ){
 
 			 DEBUG_PRINT("last Command %s File%s\n",action[command_location],action[file_location]); 		
 			 
-			 DEBUG_PRINT("*****COMMAND %d, FILE FOUND %d",commandFilter,fileFoundFlag);
+			 DEBUG_PRINT("COMMAND %d, FILE FOUND %d",commandFilter,fileFoundFlag);
 			if(!commandFilter && fileFoundFlag == FILE_FOUND){
 				//Create the thread for all the communication with DFS Servers
 				for (c=0;c<MAXDFSCOUNT;c++ ){
