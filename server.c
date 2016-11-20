@@ -59,6 +59,7 @@ struct timeval timeout={0,0};
 
 #define LISTENQ 1000 
 #define SERV_PORT 3000
+#define MAXACKSIZE 100
 
 
 #define DEBUGLEVEL
@@ -181,6 +182,7 @@ char ack_message[ACKMESSAGE];
 
 int *mult_sock=NULL;//to alloacte the client socket descriptor
 
+char deluse[MAXACKSIZE]="~|~|~";
 /*************************************************************
 //Split string on basis of delimiter 
 //Assumtion is string is ended by a null character
@@ -206,6 +208,7 @@ int splitString(char *splitip,char *delimiter,char (*splitop)[MAXCOLSIZE],int ma
 		return -1;//return -1 on error 
 	}
 	
+	DEBUG_PRINT("delimiter %s",delimiter);
 	
 	p=strtok(splitip,delimiter);//first token string 
 	
@@ -629,6 +632,7 @@ int rcvFile (char *filename,char *dataInput,char *folder){
     //DEBUG_PRINT("%s",)
 	if((fd= open(filename,O_CREAT|O_RDWR|O_TRUNC,0666)) <0){//open a file to store the data in file
 		perror(filename);//if can't open
+		DEBUG_PRINT("Can't open file");
 		return -1;
 	}
 	else // open file successfully ,read file 
@@ -637,7 +641,8 @@ int rcvFile (char *filename,char *dataInput,char *folder){
 		DEBUG_PRINT("Data %s",dataInput);
 		if(write(fd,dataInput,strlen(dataInput))<0){//write to file , with strlen as sizeof has larger value 
 					perror("Error for writing to file");
-					rcount =-1;	
+					DEBUG_PRINT("ERROR writting to FIle");
+					return -1;	
 		}
 		else// when write has be done
 		{	
@@ -653,16 +658,16 @@ int rcvFile (char *filename,char *dataInput,char *folder){
 
 	bzero(tempFile,sizeof(tempFile));
 	bzero(filename,sizeof(filename));
-	return rcount;
+	return 1;
 }
-
+//char deluse[MAXACKSIZE]="~|~|~";
 //Send data to different DFS
 int sendDataToClient (struct DataFmt sendData)
 {
 
 	char sendMessage[MAXBUFSIZE];
 	//sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
-	sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s|",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	sprintf(sendMessage,"%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
 	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
@@ -980,7 +985,7 @@ void *client_connections(void *client_sock_id)
 				total_attr_commands=0;
 
 
-				if((total_attr_commands=splitString(message_client,"|",packet,10)>0))
+				if((total_attr_commands=splitString(message_client,deluse,packet,10)>0))
 				{
 					//copy contents to data structure of data struture 
 					strncpy(datafromClient.DFCRequestUser,packet[DFCUserloc],sizeof(packet[DFCUserloc]));
