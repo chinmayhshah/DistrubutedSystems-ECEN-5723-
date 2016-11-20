@@ -28,6 +28,10 @@ Last Edit : 9/25
 #include <sys/stat.h>
 #include <unistd.h>
 
+
+#define ENCRYPT
+
+
 //#include <time.h>
 #define MAXCOMMANDSIZE 100
 #define PACKETNO 7

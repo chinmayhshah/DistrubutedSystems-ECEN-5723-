@@ -129,9 +129,12 @@ int partdest2[MAXDFSCOUNT];
 enum ERR_STATE {CRED_ERROR,CRED_FAIL,CRED_PASS};
 enum FILE_STATE {FILE_NOTFOUND,FILE_FOUND,FILE_NOTOPEN};
 
-int passCred=CRED_FAIL;
+int passCred;
 
-
+int passCredPUT;
+int	passCredLIST;
+int	passCredGET;
+int	passCredMKDIR;
 
 
 
@@ -672,7 +675,84 @@ int MD5Cal(char *filename, char *MD5_result)
 	return 0;
 }
 
+//encrypt and store back to original file 
+char *encryptfile(char *infile,char *pass){
+	char syscommand[MAXCOMMANDSIZE];
+	char tempFile[MAXCOLSIZE];
+	char tempFile2[MAXCOLSIZE];
+	
+	//openssl enc -aes-256-cbc -in test.txt.1 -out test.txt.1_en -k pass1
+	sprintf(syscommand,"openssl enc -aes-256-cbc -in %s -out %s_en -k %s",infile,infile,pass);
+	DEBUG_PRINT("Command for encryption %s",syscommand);
+	system(syscommand);
+	//renaming or moving the file 
+	sprintf(tempFile,"%s_en",infile);
+	sprintf(tempFile2,"%s_bfen",infile);
+	
 
+	if(!rename(infile,tempFile2)){
+		DEBUG_PRINT("Rename successful %s %s",tempFile2,infile);
+
+	}else
+	{
+		DEBUG_PRINT("unsuccessful");		
+	}
+
+
+
+	if(!rename(tempFile,infile)){
+		DEBUG_PRINT("Rename successful %s %s",tempFile,infile);
+
+	}else
+	{
+		DEBUG_PRINT("unsuccessful");		
+	}
+	DEBUG_PRINT("Afterr encryption File name => %s",tempFile);
+	//strcat(infile,"_old");
+	//strcpy(infile,tempFile);
+	DEBUG_PRINT("Afterr encryption File name => %s",infile);
+	return tempFile;
+}
+
+int decryptfile(char *infile,char *pass){
+	char syscommand[MAXCOMMANDSIZE];
+	char tempFile[MAXCOLSIZE];
+	char tempFile2[MAXCOLSIZE];
+	
+	//openssl enc -d -aes-256-cbc -in de_test.txt.1 -out test.txt.1 -k pass1
+	sprintf(syscommand,"openssl enc -d -aes-256-cbc -in %s -out %s_de -k %s",infile,infile,pass);
+	DEBUG_PRINT("Command for decryption %s",syscommand);
+	system(syscommand);
+
+
+	//renaming or moving the file 
+	sprintf(tempFile,"%s_de",infile);
+	sprintf(tempFile2,"%s_bfde",infile);
+	
+
+	if(!rename(infile,tempFile2)){
+		DEBUG_PRINT("Rename successful %s %s",tempFile2,infile);
+
+	}else
+	{
+		DEBUG_PRINT("unsuccessful");		
+	}
+
+
+
+	if(!rename(tempFile,infile)){
+		DEBUG_PRINT("Rename successful %s %s",tempFile,infile);
+
+	}else
+	{
+		DEBUG_PRINT("unsuccessful");		
+	}
+	DEBUG_PRINT("Afterr decryption In File name => %s",tempFile);
+	//strcat(infile,"_old");
+	//strcpy(infile,tempFile);
+	DEBUG_PRINT("Afterr decryption In File name => %s",infile);
+	return 0;
+}
 
 
 
@@ -683,7 +763,7 @@ i/p :sourcefilename -  Filename to be split
 
 Ref for understanding :http://www.programmingsimplified.com/c-program-merge-two-files
 ***************************************************************************************/
-int splitFile(char *sourcefilename,int parts)
+int splitSourceFile(char *sourcefilename,int parts)
 {
 
  	//char sourceFileName[MAXPACKSIZE], ch, 
@@ -766,7 +846,6 @@ int splitFile(char *sourcefilename,int parts)
     }	
    DEBUG_PRINT("after completed split %s File%s\n",action[command_location],action[file_location]); 										
 }
-
 
 
 
@@ -926,16 +1005,17 @@ void rcvDFSFile(int socketID){
 		if (!strncmp(message_server,"Invalid",strlen("Invalid")))
 		{
 			printf("\n%s\n",message_server);
-			passCred=CRED_FAIL;
+			passCredGET=CRED_FAIL;
 		}
 		else{								
 			DEBUG_PRINT("NO error message");
-			passCred==CRED_PASS;
+			passCredGET==CRED_PASS;
+			DEBUG_PRINT("*****Pass CRED %d",passCredGET);
 		}
+		DEBUG_PRINT("*****Pass CRED %d",passCredGET);
+		if (passCredGET!=CRED_FAIL){
 
-		if (passCred==CRED_PASS){
-
-			//
+			DEBUG_PRINT("*****Pass CRED %d",passCredGET);
 			if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
 				total_attr_commands=0;
 
@@ -1103,13 +1183,14 @@ void *DFSThreadServed(void *Id){
 						if (!strncmp(list[list_count],"Invalid",strlen("Invalid")))
 						{
 							printf("\n%s\n",list[list_count] );
-							passCred=CRED_FAIL;
+							passCredLIST=CRED_FAIL;
 						}
 						else{								
 							DEBUG_PRINT("Last Filename in thread %d , list_count %d = >%s",(int)Id,list_count,list[list_count]);
-							passCred=CRED_PASS;
+							passCredLIST=CRED_PASS;
 							list_count++;
-						}						
+						}
+						DEBUG_PRINT("*****Pass CRED %d",passCredLIST);						
 
 					}
 					else if ((strncmp(requesttoserver.DFCRequestCommand,"GET",strlen("GET")))==0){								
@@ -1257,18 +1338,19 @@ void putDFSFile(){
 		if(nbytes = recv(sock[datatoserver.DFServerId],ACK_packet,sizeof(ACK_packet),0)>0)	{	
 			DEBUG_PRINT("\nACK Packet%s\n",ACK_packet );
 			if(!strcmp(ACK_packet,"OK")){
-				passCred =CRED_PASS;
+				passCredPUT =CRED_PASS;
 			}
 			else if (!strncmp(ACK_packet,"Invalid",strlen("Invalid"))){
-				passCred =CRED_FAIL;	
+				passCredPUT =CRED_FAIL;	
 				printf("%s\n",ACK_packet );
 			}
 			else
 			{
-				passCred =CRED_ERROR;		
+				passCredPUT =CRED_ERROR;		
 				printf("%s\n",ACK_packet );
 			}	
 		}	
+		DEBUG_PRINT("*****Pass CRED %d",passCredPUT);
 		
 		/*
 		
@@ -1661,10 +1743,14 @@ int main (int argc, char * argv[] ){
 	char MD5filelast[MAXDFSCOUNT];
 	int MD5length=0;
 	MD5file = MD5_temp;
-	passCred=CRED_FAIL;
+	passCredPUT=CRED_FAIL;
+	passCredLIST=CRED_FAIL;
+	passCredGET=CRED_FAIL;
+	passCredMKDIR=CRED_FAIL;
 	char temmpFileName[MAXCOLSIZE];
     int commandFilter=0,fileCheck=0;
     int fileFoundFlag=FILE_NOTFOUND;
+    char temprename[MAXCOLSIZE];
 	//Input of filename for config 
 	if (argc != 2){
 		printf ("USAGE:  <Conf File>\n");
@@ -1751,7 +1837,7 @@ int main (int argc, char * argv[] ){
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestCommand));
 			bzero(requesttoserver.DFCRequestFolder,sizeof(requesttoserver.DFCRequestFolder));
 			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
-
+			bzero(temprename,sizeof(temprename));
 
 
 			bzero(datatoserver.DFCRequestCommand,sizeof(datatoserver.DFCRequestCommand));
@@ -1945,9 +2031,12 @@ int main (int argc, char * argv[] ){
 									DEBUG_PRINT("%d",partdest2[i]);
 								}
 
+								DEBUG_PRINT("Encrypt file %s using %s",datatoserver.DFCMergedFile,config.DFCPassword);
+								encryptfile(datatoserver.DFCMergedFile,config.DFCPassword);
+
 								DEBUG_PRINT("Split file %s into %d",datatoserver.DFCMergedFile,MAXDFSCOUNT);
-								//split the file into MAXDFSCOUNT parts 
-								splitFile(datatoserver.DFCMergedFile,MAXDFSCOUNT);
+								//split the file into MAXDFSCOUNT parts
+								splitSourceFile(datatoserver.DFCMergedFile,MAXDFSCOUNT);
 								
 								DEBUG_PRINT("Files are split\n");
 								DEBUG_PRINT("after Split%s File%s\n",datatoserver.DFCRequestCommand, datatoserver.DFCMergedFile); 									
@@ -2014,9 +2103,12 @@ int main (int argc, char * argv[] ){
 						DEBUG_PRINT("Command =>%s ",action[command_location]);
 		   				DEBUG_PRINT("File(iF present) => %s",action[file_location]);
 		   				DEBUG_PRINT("Total attributes of input  => %d",total_attr_commands);
-		   				DEBUG_PRINT("PASS CRED  => %d",passCred);
-					if(passCred==CRED_PASS){		
-						if ((strncmp(datatoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)){			
+		   				DEBUG_PRINT("PASS CRED (AUTH)  => %d",passCred);
+		   				DEBUG_PRINT("PASS CRED (GET)  => %d",passCredGET);
+		   				DEBUG_PRINT("PASS CRED (LIST)  => %d",passCredLIST);
+		   				DEBUG_PRINT("PASS CRED (PUT)  => %d",passCredPUT);
+					//if(passCred==CRED_PASS){		
+						if ((strncmp(datatoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)&&passCredLIST!=CRED_FAIL){			
 							DEBUG_PRINT("Run LIST in Main ");	
 							if(listMainRcv()<0){
 								DEBUG_PRINT("NO Files found");
@@ -2026,18 +2118,21 @@ int main (int argc, char * argv[] ){
 								DEBUG_PRINT("Complete LIST ");	
 							}	
 						}												
-						else if ((strncmp(datatoserver.DFCRequestCommand,"GET",strlen("GET")))==0){
+						else if (((strncmp(datatoserver.DFCRequestCommand,"GET",strlen("GET")))==0)&&passCredGET!=CRED_FAIL ){
 							DEBUG_PRINT("Inside GET after Thread");
 							DEBUG_PRINT("File Name %s",action[file_location]);
 							sprintf(temmpFileName,".%s",action[file_location]);
 							DEBUG_PRINT("File to be merged  %s",action[file_location]);	
 							mergeFile(temmpFileName,MAXDFSCOUNT);
+							decryptfile(action[file_location],config.DFCPassword);
 							
 				  		}
 
-						else if ((strncmp(datatoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0){
+						else if (((strncmp(datatoserver.DFCRequestCommand,"PUT",strlen("PUT")))==0)&&passCredPUT!=0){
 							DEBUG_PRINT("Inside PUT after Thread");
 							DEBUG_PRINT("File Name %s",action[file_location]);						
+							sprintf(temprename,"%s_bfen",datatoserver.DFCMergedFile);
+							rename(temprename,datatoserver.DFCMergedFile);	
 
 				  		}
 				  		else
@@ -2045,7 +2140,7 @@ int main (int argc, char * argv[] ){
 				  			DEBUG_PRINT("Command not found ");
 
 				  		}	
-					}  	
+					//}  	
 
 				DEBUG_PRINT("Deallocate memory for command\n");
 				DEBUG_PRINT("Deallocate action\n");
