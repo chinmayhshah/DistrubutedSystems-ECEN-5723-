@@ -62,7 +62,7 @@ struct timeval timeout={0,0};
 #define MAXACKSIZE 100
 
 
-#define DEBUGLEVEL
+//#define DEBUGLEVEL
 
 #ifdef DEBUGLEVEL
 	#define DEBUG 1
@@ -182,7 +182,7 @@ char ack_message[ACKMESSAGE];
 
 int *mult_sock=NULL;//to alloacte the client socket descriptor
 
-char deluse[MAXACKSIZE]="~|~|~";
+char deluse[MAXACKSIZE]="~|";
 /*************************************************************
 //Split string on basis of delimiter 
 //Assumtion is string is ended by a null character
@@ -667,7 +667,7 @@ int sendDataToClient (struct DataFmt sendData)
 
 	char sendMessage[MAXBUFSIZE];
 	//sprintf(sendMessage,"%s|%s|%s|%s|%s|%s|%s",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
-	sprintf(sendMessage,"%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
+	sprintf(sendMessage,"%s~%s~%s~%s~%s~%s~%s~",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2);
 	//DEBUG_PRINT("Data to File => %s => dest %s => %s",sendData.DFCRequestFile,config.DFSName[sendData.DFServerId],sendData.DFCData,sendData.DFCData2);
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
@@ -1219,7 +1219,7 @@ int main (int argc, char * argv[] ){
 	
 	/* You will have to modify the program below */
 
-	if (argc < 3)
+	if (argc < 2)
 	{
 		printf("USAGE:  <dfs_name> <server_port>\n");
 		exit(1);

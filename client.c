@@ -60,7 +60,7 @@ File for implementation of a Distrubuted File Client and Server
 
 
 
-#define DEBUGLEVEL
+//#define DEBUGLEVEL
 
 #ifdef DEBUGLEVEL
 	#define DEBUG 1
@@ -86,7 +86,7 @@ struct sockaddr *remoteaddr;
 struct sockaddr_in from_addr;
 int addr_length = sizeof(struct sockaddr);
 char ack_message[ACKMESSAGE];
-char deluse[MAXACKSIZE]="~|~|~";
+char deluse[MAXACKSIZE]="~|";
 
 typedef enum TYPEACK{NOACK,ACK,TIMEDACK}ACK_TYPE;
 
@@ -505,7 +505,7 @@ int sendDataToDFS (struct DataFmt sendData)
 {
 
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2,sendData.DFCRequestFolder);
+	sprintf(sendMessage,"%s~%s~%s~%s~%s~%s~%s~%s~",sendData.DFCRequestUser,sendData.DFCRequestPass,sendData.DFCRequestCommand,sendData.DFCRequestFile,sendData.DFCData,sendData.DFCRequestFile2,sendData.DFCData2,sendData.DFCRequestFolder);
 	
 	DEBUG_PRINT("Message to Server =>%s",sendMessage);
 	write(sendData.socket,sendMessage,sizeof(sendMessage));		
@@ -518,7 +518,7 @@ int sendDataToDFS (struct DataFmt sendData)
 int sendcommandToDFS (struct requestCommandFmt reqCommand)
 {
 	char sendMessage[MAXBUFSIZE];
-	sprintf(sendMessage,"%s~|~|~%s~|~|~%s~|~|~%s~|~|~%s~|~|~",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCMergedFile,reqCommand.DFCRequestFolder);
+	sprintf(sendMessage,"%s~%s~%s~%s~%s~",reqCommand.DFCRequestUser,reqCommand.DFCRequestPass,reqCommand.DFCRequestCommand,reqCommand.DFCMergedFile,reqCommand.DFCRequestFolder);
 	DEBUG_PRINT("Command to Server => %s",sendMessage);
 
 	//Send Command
@@ -882,7 +882,8 @@ int mergeFile(char *mergedFileName,int parts)
 	if (sourceFile == NULL)
 	{
 		printf("couldn't open file %s",mergedFileName);
-        exit(-1);
+        //exit(-1);
+        return -1;
 
 	}
     
@@ -912,8 +913,9 @@ int mergeFile(char *mergedFileName,int parts)
 	            sourceFile=fopen(sourceFileName, "rb");
 	            	if (sourceFile == NULL)
 					{
-						printf("couldn't open file %s",mergedFileName);
-				        exit(-1);
+						printf("file cannot be recreated %s",sourceFile);
+				        return -1;
+				        //exit(-1);
 					}
 	        }
 	        if(ch=='\n'){
@@ -1014,7 +1016,7 @@ void rcvDFSFile(int socketID){
 			DEBUG_PRINT("*****Pass CRED %d",passCredGET);
 		}
 		DEBUG_PRINT("*****Pass CRED %d",passCredGET);
-		if (passCredGET!=0){
+		//if (passCredGET!=0){
 
 			DEBUG_PRINT("*****Pass CRED %d",passCredGET);
 			if ((packet=malloc(sizeof(packet)*MAXCOLSIZE))){	
@@ -1048,7 +1050,7 @@ void rcvDFSFile(int socketID){
 				writeFile(datafromServer.DFCRequestFile2,datafromServer.DFCData2);		
 
 			}	
-		}	
+		//}	
 
 	}
 	//Free the command allocated 
@@ -1109,9 +1111,6 @@ int  listMainRcv()
 
 	for (i=0;i<MAXDFSCOUNT;i++){	
 		DEBUG_PRINT(" %s",list[i]);
-
-
-
 		if(strlen(list[i])>2)
 		{	
 			DEBUG_PRINT("Lenght %d",strlen(list[i]));
@@ -1136,7 +1135,7 @@ int  listMainRcv()
 	}		
 	DEBUG_PRINT("Split files ");			
 		
-	while(i < MAXDFSCOUNT){						
+	while(i < nofiles){						
 		if (list[i][j] == ' '){			
 			list_temp[k][j]='\0';					
 			if (list[i][j+1] == '#'){
@@ -1330,6 +1329,7 @@ int  listMainRcv()
 			 // check if all flag bits 
 				for (i=1;i<=MAXDFSCOUNT;i++){
 					DEBUG_PRINT("Part %d => %d ",i,partflags[f][i]);
+					DEBUG_PRINT("File Name %s => Part %d value ",filename[f],i);
 					if (partflags[f][i]==0){
 						DEBUG_PRINT("File Name %s => Part %d Not found ",filename[f],i);
 						final_list=1;
@@ -1354,6 +1354,13 @@ int  listMainRcv()
 	}	
 	DEBUG_PRINT("Return to main" );
 
+	
+	//memset(list, 0, sizeof(list[0][0]) * MAXFILESCOUNT * MAXFILESIZE);
+	for (i=0;i<nofiles;i++){	
+		bzero(list[i],sizeof(list[i]));
+	
+	}
+	
 	return 0;
 
 }
@@ -1730,7 +1737,7 @@ int FilePresent(char *fname){
 
 		
 int main (int argc, char * argv[] ){
-    int i=0,c=0,l=0;
+    int i=0,c=0,l=0,n=0;
    	int k=0,temp=0;
     char message[1000] , server_reply[2000];
 	char request[MAXPACKSIZE];             //a request to store our received message
@@ -1824,15 +1831,16 @@ int main (int argc, char * argv[] ){
 	DEBUG_PRINT("Completed splitting File name");     
     //keep communicating with server depending on command entered 
 	printf("Enter Command\n");
-	printf("GET <Filename> - to get file from DFS\n");
-	printf("PUT <Filename> - to put file to DFS \n");
-	printf("LIST -list files on  DFS server\n");
+	printf("GET <Filename> <folderName> - to get file from DFS\n");
+	printf("PUT <Filename>  <folderName> - to put file to DFS \n");
+	printf("LIST <folderName>-list files on  DFS server\n");
 	printf("MKDIR <folderName> -to create a directory(subfolder) on DFS\n");
 	
 		
 	while(1)
 	{//start of while 
 			DEBUG_PRINT("Start oF Main");
+			printf("\n");
 			//Clear the command and request to Client 
 			bzero(requesttoserver.DFCRequestFile,sizeof(requesttoserver.DFCRequestFile));
 			bzero(requesttoserver.DFCMergedFile,sizeof(requesttoserver.DFCMergedFile));
@@ -1861,6 +1869,10 @@ int main (int argc, char * argv[] ){
 			partdest2[2]=4;
 			partdest2[3]=1;
 
+			passCredPUT=0;
+			passCredLIST=0;
+			passCredGET=0;
+			passCredMKDIR=0;
 			//partdest2[MAXDFSCOUNT]={2,3,4,1};
 
 			//wait for input from user 
@@ -1869,6 +1881,13 @@ int main (int argc, char * argv[] ){
 					command[strlen(command)-1]='\0';
 			}	
 
+			//Initialize Socket
+			for (n=0;n<MAXDFSCOUNT;n++){
+				sock[n]=-1;
+				bzero(list[i],sizeof(list[i]));
+
+			}
+			n=0;
 
 			//bzero(ack_recv,sizeof(ack_recv));	
 			//ack_bytes=recvfrom(sock,ack_recv,sizeof(ack_recv),0,(struct sockaddr*)&remote,&addr_length);
@@ -2115,14 +2134,14 @@ int main (int argc, char * argv[] ){
 						if ((strncmp(datatoserver.DFCRequestCommand,"LIST",strlen("LIST"))==0)&&passCredLIST!=0){			
 							DEBUG_PRINT("Run LIST in Main ");	
 							if(listMainRcv()<0){
-								DEBUG_PRINT("NO Files found");
+								printf("NO Files found");
 							}
 							else
 							{
 								DEBUG_PRINT("Complete LIST ");	
 							}	
 						}												
-						else if (((strncmp(datatoserver.DFCRequestCommand,"GET",strlen("GET")))==0)&&passCredGET!=0 ){
+						else if (((strncmp(datatoserver.DFCRequestCommand,"GET",strlen("GET")))==0) ){
 							DEBUG_PRINT("Inside GET after Thread");
 							DEBUG_PRINT("File Name %s",action[file_location]);
 							sprintf(temmpFileName,".%s",action[file_location]);
