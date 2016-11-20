@@ -1022,7 +1022,7 @@ void *client_connections(void *client_sock_id)
 						//Check for Credentials
 						if(credCheck()==CRED_PASS){
 							DEBUG_PRINT("Send to LIST fundtion");
-							strcpy(datafromClient.DFCRequestFolder,packet[DFCDataloc]);
+							strcpy(datafromClient.DFCRequestFolder,packet[DFCFileloc]);
 	   						DEBUG_PRINT("SubFolder %s ",datafromClient.DFCRequestFolder);
 							if(strlen(datafromClient.DFCRequestFolder)>0){
 								strncat(directory,datafromClient.DFCRequestFolder,strlen(datafromClient.DFCRequestFolder));
